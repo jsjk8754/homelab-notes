@@ -1,0 +1,39 @@
+baseURL = 'https://jsjk8754.github.io/homelab-notes/'
+locale = 'ko-KR'
+defaultContentLanguage = 'ko'
+title = 'Homelab Notes'
+timeZone = 'Asia/Seoul'
+hasCJKLanguage = true
+enableRobotsTXT = true
+summaryLength = 100
+
+[params]
+  author = 'Alcedo'
+  description = '홈랩과 보안을 공부하며 남기는 설계, 실험, 검증의 기록.'
+  githubURL = 'https://github.com/jsjk8754'
+  repositoryURL = 'https://github.com/jsjk8754/homelab-notes'
+  velogURL = 'https://velog.io/@alcedo'
+
+[outputs]
+  home = ['HTML', 'RSS', 'JSON']
+
+[taxonomies]
+  tag = 'tags'
+
+[markup]
+  [markup.highlight]
+    style = 'friendly'
+    lineNos = false
+    noClasses = false
+  [markup.goldmark.renderer]
+    unsafe = false
+  [markup.tableOfContents]
+    startLevel = 2
+    endLevel = 3
+    ordered = false
+
+[caches.images]
+  dir = ':cacheDir/images'
+
+[sitemap]
+  changeFreq = 'monthly'

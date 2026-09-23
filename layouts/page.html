@@ -1,0 +1,11 @@
+{{ define "main" }}
+<article class="shell article">
+  <header class="article-heading"><a class="back-link" href="{{ .CurrentSection.RelPermalink }}">{{ .CurrentSection.Title }} {{ partial "arrow.html" . }}</a><h1>{{ .Title }}</h1><p class="article-summary">{{ .Params.summary }}</p><div class="article-meta"><span>{{ site.Params.author }}</span><time datetime="{{ .Date.Format "2006-01-02" }}">{{ .Date.Format "2006.01.02" }}</time><span>{{ .ReadingTime }}분 읽기</span></div>
+  {{ with .Params.stack }}<div class="article-stack">{{ range . }}<span>{{ . }}</span>{{ end }}</div>{{ end }}</header>
+  <div class="article-layout"><aside class="toc"><details open><summary>이 글의 순서</summary>{{ .TableOfContents }}</details>{{ with .Params.repository }}<a class="text-link repository-link" href="{{ . }}">구현 저장소 {{ partial "arrow.html" $ }}</a>{{ end }}</aside><div class="article-body"><div class="prose">{{ .Content }}</div>
+  {{ with .Params.tags }}<nav class="article-tags" aria-label="글의 주제">{{ range . }}{{ with site.GetPage (printf "/tags/%s" (. | urlize)) }}<a href="{{ .RelPermalink }}">#{{ .LinkTitle }}</a>{{ end }}{{ end }}</nav>{{ end }}
+  <div class="article-actions"><button type="button" data-copy-link hidden>이 글 링크 복사</button><a href="{{ .CurrentSection.RelPermalink }}">목록으로 돌아가기 {{ partial "arrow.html" . }}</a></div><p class="copy-status" role="status" data-copy-status></p>
+  {{ with .Params.storyURL }}<a class="story-reference" href="{{ . }}">이 실험의 이야기를 벨로그에서 읽기 {{ partial "arrow.html" $ }}</a>{{ end }}
+  </div></div>
+</article>
+{{ end }}

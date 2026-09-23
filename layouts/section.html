@@ -1,0 +1,10 @@
+{{ define "main" }}
+{{ if eq .Section "about" }}
+<div class="shell about-layout"><header class="page-heading"><span class="section-number">ABOUT</span><h1>만들면서 배우고,<br>기록하며 확인합니다.</h1><p>{{ site.Params.author }} · Homelab Notes</p><div class="about-links"><a class="text-link" href="{{ site.Params.githubURL }}">GitHub {{ partial "arrow.html" . }}</a><a class="text-link" href="{{ site.Params.velogURL }}">Velog {{ partial "arrow.html" . }}</a></div></header><div class="prose">{{ .Content }}</div></div>
+{{ else }}
+<div class="shell archive"><header class="page-heading"><a class="back-link" href="{{ site.Home.RelPermalink }}">Homelab Notes</a><h1>{{ .Title }}</h1><div class="archive-intro prose">{{ .Content }}</div></header>
+  {{ if eq .Section "notes" }}<nav class="tag-filter" aria-label="주제별 노트"><a class="active" href="{{ .RelPermalink }}">전체</a>{{ range site.Taxonomies.tags.Alphabetical }}<a href="{{ .Page.RelPermalink }}">{{ .Page.LinkTitle }}</a>{{ end }}</nav>{{ end }}
+  <div>{{ range $i,$p := .RegularPages.ByDate.Reverse }}{{ if eq $.Section "projects" }}{{ partial "project-row.html" (dict "page" $p "index" (add $i 1)) }}{{ else }}{{ partial "note-row.html" (dict "page" $p "index" (add $i 1)) }}{{ end }}{{ end }}</div>
+</div>
+{{ end }}
+{{ end }}

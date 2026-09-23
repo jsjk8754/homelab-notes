@@ -1,0 +1,1 @@
+{{ define "main" }}<div class="shell archive"><header class="page-heading"><a class="back-link" href="{{ "tags/" | relURL }}">모든 주제</a><h1>{{ .Title }}</h1><p>이 주제로 남긴 기록입니다.</p></header>{{ range $i,$p := .RegularPages.ByDate.Reverse }}{{ partial "note-row.html" (dict "page" $p "index" (add $i 1)) }}{{ end }}</div>{{ end }}

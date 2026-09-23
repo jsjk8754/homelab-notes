@@ -1,0 +1,1 @@
+{{ define "main" }}<div class="shell archive"><header class="page-heading"><h1>Topics</h1><p>주제별로 기록을 찾아보세요.</p></header><div class="topic-list">{{ range .Pages }}<a href="{{ .RelPermalink }}"><span>{{ .Title }}</span><span>{{ len .RegularPages }}개의 글</span>{{ partial "arrow.html" . }}</a>{{ end }}</div></div>{{ end }}
