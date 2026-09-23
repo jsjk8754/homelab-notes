@@ -1,0 +1,156 @@
+/* The reference's single fixed canvas and six-scene composition. */
+.story-home { font-family: var(--korean); }
+.story-home .grain { opacity: .012; }
+#story-particles { display: none; position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1; touch-action: pan-y; }
+.story-header { position: absolute; z-index: 12; inset: 20px 2.4% auto; display: flex; align-items: center; justify-content: space-between; }
+.story-brand { display: inline-flex; align-items: baseline; gap: 13px; font: italic 25px/1 var(--serif); }
+.story-brand span { color: var(--muted); font: 8px var(--mono); letter-spacing: 1.5px; }
+.story-header-actions { display: flex; align-items: center; gap: 23px; font: 16px var(--serif); }
+.story-header-actions>a { min-height: 32px; display: grid; place-items: center; }
+.story-header-actions>a svg { stroke: currentColor; stroke-width: 1.25; }
+.story-header .theme-toggle { width: 32px; height: 32px; }
+.story-navigation { position: fixed; right: 1.55%; top: 50%; transform: translateY(-50%); z-index: 12; display: none; flex-direction: column; }
+.story-navigation a { display: flex; align-items: center; justify-content: end; gap: 8px; min-width: 42px; height: 28px; color: var(--muted); font: 9px var(--mono); }
+.story-navigation i { width: 8px; height: 1px; background: var(--muted); transition: width .3s; }
+.story-navigation [aria-current] { color: var(--fg); }
+.story-navigation [aria-current] i { width: 20px; background: var(--accent); }
+.story-scene { position: relative; min-height: 100svh; padding: 90px 7%; }
+.story-intro { display: grid; place-items: center; }
+.story-title { margin: 0; font: italic 9.58vw/1 var(--serif); letter-spacing: 0; }
+.scene-copy { max-width: 480px; }
+.scene-eyebrow { font: 9px/1.5 var(--mono); color: var(--muted); letter-spacing: 1.6px; margin: 0 0 24px; display: flex; align-items: center; gap: 10px; }
+.scene-eyebrow:before { content: ''; width: 14px; height: 1px; background: var(--accent); }
+.story-scene h2 { font: 500 clamp(28px,2.65vw,42px)/1.4 var(--korean); letter-spacing: -1.4px; margin: 0 0 20px; word-break: keep-all; }
+.scene-description { font: 400 13px/1.95 var(--korean); color: var(--muted); margin: 0; }
+.scene-topics { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); margin-top: 23px; font: 8px/1.7 var(--mono); letter-spacing: .5px; }
+.scene-link { display: inline-flex; align-items: center; gap: 18px; margin-top: 32px; font: 12px/1.5 var(--sans); min-height: 40px; }
+.scene-link svg { width: 20px; }
+.diagram-note { color: var(--muted); font: 9px var(--sans); }
+.frame-label { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font: 8px/1.5 var(--mono); letter-spacing: .8px; }
+.particle-code,.particle-project,.particle-note { border: 1px solid var(--line); border-radius: 12px; padding: 22px; margin-top: 32px; }
+.particle-code pre { font: 10px/1.9 var(--mono); color: var(--fg); margin: 28px 0 0; overflow: hidden; white-space: pre-wrap; }
+.code-muted { color: var(--muted); }.code-accent { color: var(--accent); }
+.particle-project h3 { font: 500 21px/1.6 var(--korean); letter-spacing: -.7px; margin: 28px 0 15px; word-break: keep-all; }
+.particle-project p { font: 12px/1.8 var(--sans); color: var(--muted); margin: 0; word-break: keep-all; }
+.project-scene-links { display: flex; justify-content: space-between; gap: 14px; margin-top: 23px; }
+.project-scene-links a { font: 11px/1.5 var(--sans); display: inline-flex; gap: 8px; align-items: center; min-height: 34px; }
+.project-scene-links svg { width: 15px; }
+.particle-note { display: block; }
+.particle-note h3 { font: 500 21px/1.6 var(--korean); letter-spacing: -.65px; margin: 27px 0 16px; word-break: keep-all; }
+.particle-note p { font: 12px/1.9 var(--sans); color: var(--muted); margin: 0; word-break: keep-all; }
+.note-open { display: inline-flex; align-items: center; gap: 18px; margin-top: 32px; min-height: 34px; font: 11px var(--sans); }
+.note-open svg { width: 18px; }
+.flow-labels { display: none; pointer-events: none; }
+.flow-labels>span { position: absolute; transform: translateX(-50%); color: var(--fg); font: 10px/1.6 var(--mono); letter-spacing: 1px; text-align: center; }
+.flow-labels>span>span { display: block; color: var(--muted); font: 10px/1.8 var(--sans); letter-spacing: 0; margin-top: 4px; }
+.final-copy { text-align: center; }
+.final-copy .scene-eyebrow { justify-content: center; }
+.particle-search { width: min(520px,100%); margin: 50px auto 0; }
+.particle-search-wrap { display: flex; align-items: center; gap: 16px; height: 62px; border: 1px solid var(--fg); border-radius: 40px; padding: 9px 10px 9px 23px; }
+.particle-search input { font: 18px/1.4 var(--korean); min-width: 0; width: 0; flex: 1; padding: 6px 0; background: none; border: 0; color: var(--fg); }
+.particle-search input::placeholder { color: var(--muted); }
+.particle-search button { width: 40px; height: 40px; border: 1px solid var(--fg); border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
+.particle-search button svg { width: 20px; transform: rotate(-90deg); }
+.search-caption { text-align: center; margin: 20px 0 0; font: 8px/1.5 var(--mono); color: var(--muted); letter-spacing: 1.4px; }
+.final-links { display: flex; justify-content: center; gap: 30px; margin-top: 44px; font: 21px/1 var(--serif); }
+.final-links a { padding-block: 12px; }
+.return-intro { display: block; width: max-content; margin: 50px auto 0; padding: 10px; font: 10px var(--sans); color: var(--muted); }
+.mobile-break { display: none; }
+#story-track { display: none; }
+
+/* Enhancement is enabled only after the renderer and controller are ready. */
+html.immersive-ready { scroll-behavior: auto; scroll-padding-top: 0; }
+.immersive-ready #story-particles { display: block; }
+.immersive-ready .story-header { position: fixed; }
+.immersive-ready .story-navigation { display: flex; }
+.immersive-ready .story-header,.immersive-ready .story-navigation { opacity: 1; visibility: visible; transition: opacity .4s, visibility .4s; }
+[data-story-intro=true] .story-header,[data-story-intro=true] .story-navigation { opacity: 0; visibility: hidden; pointer-events: none; }
+.immersive-ready #story-track { display: block; height: 1500svh; pointer-events: none; }
+.immersive-ready .story-scene { position: fixed; inset: 0; z-index: 3; min-height: 0; padding: 0; opacity: 0; visibility: hidden; pointer-events: none; }
+.immersive-ready .story-scene.is-active { visibility: visible; }
+.immersive-ready .story-scene a,.immersive-ready .story-scene button,.immersive-ready .story-scene input { pointer-events: auto; }
+.immersive-ready .story-scene[inert] { pointer-events: none; }
+.immersive-ready .story-scene[inert] * { pointer-events: none; }
+.immersive-ready .story-intro { display: grid; }
+.immersive-ready .story-title { opacity: 1; }
+.immersive-ready:has(#story-particles[data-ready="true"]) .story-title { opacity: 0; }
+.immersive-ready .scene-copy { position: absolute; top: 50%; left: 2.4%; width: 34%; max-width: 470px; transform: translateY(-50%); }
+.immersive-ready .diagram-note { position: absolute; right: 11%; top: 83%; margin: 0; }
+.immersive-ready .particle-code,.immersive-ready .particle-project,.immersive-ready .particle-note { position: absolute; margin: 0; border-color: transparent; }
+.immersive-ready .particle-code { left: 44%; top: 51%; transform: translateY(-50%); width: 20%; height: 240px; }
+.immersive-ready .particle-project { left: 72%; top: 51%; transform: translateY(-50%); width: 22%; min-height: 250px; }
+.immersive-ready .particle-note { left: 48%; top: 33%; width: 20%; min-height: 290px; }
+.immersive-ready .particle-note:nth-child(2) { left: 73%; top: 40%; }
+.immersive-ready .flow-labels { display: block; }
+.immersive-ready .flow-source { left: 47%; top: calc(51% + 33px); }
+.immersive-ready .flow-technical { left: 68%; top: calc(28% + 30px); }
+.immersive-ready .flow-story { left: 68%; top: calc(51% + 30px); }
+.immersive-ready .flow-code { left: 68%; top: calc(74% + 30px); }
+.immersive-ready .flow-result { left: 90%; top: calc(51% + 33px); }
+.immersive-ready .final-copy { position: absolute; top: 20%; width: 100%; }
+.immersive-ready .final-copy h2 { font-size: 34px; }
+.immersive-ready .particle-search { position: absolute; top: 51%; left: 50%; transform: translateX(-50%); margin: 0; }
+.immersive-ready .particle-search-wrap,.immersive-ready .particle-search button { border-color: transparent; }
+.immersive-ready .final-links { position: absolute; top: 66%; width: 100%; margin: 0; }
+.immersive-ready .return-intro { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); margin: 0; }
+
+@media(max-width:1100px) and (min-width:701px) {
+ .story-scene h2 { font-size: 28px; }.scene-description { font-size: 12px; }
+ .particle-code,.particle-project,.particle-note { padding: 16px; }.particle-project h3,.particle-note h3 { font-size: 18px; }
+ .particle-code pre { font-size: 8px; }.particle-project p,.particle-note p { font-size: 11px; }
+ .frame-label { font-size: 7px; letter-spacing: .1px; }
+}
+@media(max-width:700px) {
+ .story-header { inset: 20px 6% auto; }.story-brand { font-size: 25px; }.story-brand span { display: none; }
+ .story-header-actions { gap: 20px; font-size: 16px; }.story-header-actions>a { min-height: 38px; }.story-header .theme-toggle { width: 36px; height: 36px; }
+ .story-navigation { right: 4%; top: auto; bottom: 14px; left: 4%; transform: none; flex-direction: row; justify-content: center; gap: 7px; }
+ .story-navigation a { height: 44px; min-width: 41px; font-size: 10px; gap: 5px; }.story-navigation [aria-current] i { width: 12px; }
+ .story-scene { padding: 80px 7%; }.story-title { font-size: 22.5vw; }
+ .scene-eyebrow { font-size: 9px; margin-bottom: 17px; }.story-scene h2 { font-size: 29px; line-height: 1.4; letter-spacing: -.9px; margin-bottom: 14px; }
+ .scene-description { font-size: 12px; line-height: 1.8; }.scene-topics { font-size: 7px; gap: 12px; margin-top: 16px; }.scene-link { margin-top: 17px; min-height: 44px; font-size: 11px; }
+ .immersive-ready .scene-copy { top: 14%; left: 7%; width: 84%; max-width: none; transform: none; }
+ .immersive-ready .diagram-note { top: auto; bottom: 10%; right: 7%; font-size: 8px; }
+ .immersive-ready .particle-code { left: 7%; top: 51%; width: 40%; height: 218px; transform: none; }
+ .immersive-ready .particle-project { left: 53%; top: 51%; width: 40%; min-height: 218px; transform: none; }
+ .particle-code,.particle-project,.particle-note { padding: 14px; border-radius: 12px; }
+ .frame-label { font-size: 7px; letter-spacing: .25px; flex-wrap: wrap; gap: 2px; }
+ .particle-code pre { font-size: 7px; line-height: 2; margin-top: 22px; }
+ .particle-project h3,.particle-note h3 { font-size: 16px; line-height: 1.55; letter-spacing: -.4px; margin: 22px 0 12px; }
+ .particle-project p,.particle-note p { font-size: 10px; line-height: 1.8; }
+ .project-scene-links { gap: 5px; margin-top: 16px; }.project-scene-links a { font-size: 9px; gap: 3px; min-height: 38px; }.project-scene-links svg { width: 12px; }
+ .immersive-ready .particle-note { left: 8%; top: 49%; width: 40%; min-height: 235px; }
+ .immersive-ready .particle-note:nth-child(2) { left: 53%; top: 55%; }
+ .note-open { font-size: 10px; gap: 10px; margin-top: 18px; min-height: 38px; }
+ .flow-labels>span { font-size: 9px; }.flow-labels>span>span { font-size: 9px; }
+ .immersive-ready .flow-source { left: 12%; top: calc(67% + 22px); }.immersive-ready .flow-result { left: 87%; top: calc(67% + 22px); }
+ .immersive-ready .flow-technical { left: 51%; top: calc(51% + 23px); }.immersive-ready .flow-story { left: 51%; top: calc(67% + 23px); }.immersive-ready .flow-code { left: 51%; top: calc(83% + 23px); }
+ .immersive-ready .final-copy { top: 23%; }.immersive-ready .final-copy h2 { font-size: 28px; }
+ .particle-search { width: 84%; }.particle-search input { font-size: 13px; }.particle-search-wrap { height: 58px; padding-left: 16px; gap: 7px; }.particle-search button { width: 38px; height: 38px; }
+ .immersive-ready .final-links { top: 67%; gap: 26px; font-size: 20px; }.immersive-ready .return-intro { bottom: 80px; }
+}
+@media(max-height:650px) and (max-width:700px) {
+ .immersive-ready .scene-copy { top: 12%; }.story-scene h2 { font-size: 24px; margin-bottom: 10px; }.scene-eyebrow { margin-bottom: 10px; }
+ .scene-description { font-size: 10px; }.scene-topics { margin-top: 8px; }.scene-link { margin-top: 8px; }
+ .immersive-ready .particle-code,.immersive-ready .particle-project { top: 51%; min-height: 180px; height: 180px; padding: 10px; }
+ .immersive-ready .particle-project { height: auto; }
+ .particle-project h3 { font-size: 14px; margin-top: 14px; }.particle-project p { font-size: 9px; }.project-scene-links { margin-top: 8px; }
+ .particle-code pre { font-size: 6px; margin-top: 15px; }
+ .immersive-ready .particle-note { top: 48%; min-height: 196px; padding: 12px; }.immersive-ready .particle-note:nth-child(2) { top: 52%; }
+ .particle-note h3 { font-size: 14px; margin-top: 16px; }.particle-note p { font-size: 9px; }.note-open { margin-top: 8px; }
+ .immersive-ready .flow-source,.immersive-ready .flow-result { top: calc(64% + 22px); }
+ .immersive-ready .flow-technical { top: calc(50% + 23px); }.immersive-ready .flow-story { top: calc(64% + 23px); }.immersive-ready .flow-code { top: calc(78% + 23px); }
+ .search-caption { font-size: 7px; }.immersive-ready .final-links { top: 70%; }
+}
+@media(min-width:701px) and (max-height:550px) {
+ .story-header { inset-block-start: 10px; }.immersive-ready .scene-copy { top: 50%; width: 34%; }.story-scene h2 { font-size: 26px; }.scene-eyebrow { margin-bottom: 12px; }.scene-link { margin-top: 12px; }.scene-description { font-size: 11px; }
+ .immersive-ready .particle-project { min-height: 230px; }.immersive-ready .particle-note { top: 20%; min-height: 230px; padding: 14px; }.immersive-ready .particle-note:nth-child(2) { top: 26%; }
+ .particle-note h3 { font-size: 16px; margin: 18px 0 12px; }.particle-note p { font-size: 10px; }.note-open { margin-top: 12px; min-height: 32px; }
+ .immersive-ready .final-copy { top: 15%; }.immersive-ready .final-copy h2 { font-size: 26px; }.immersive-ready .final-links { top: 75%; }.immersive-ready .return-intro { bottom: 8px; }
+}
+@media(prefers-reduced-motion:reduce) { .story-home * { transition: none!important; animation: none!important; } }
+@media print {
+ #story-particles,#story-track,.story-header,.story-navigation { display: none!important; }
+ .immersive-ready .story-scene { position: static; opacity: 1!important; visibility: visible; padding: 24px 0; break-inside: avoid; }
+ .immersive-ready .story-title { opacity: 1; }.immersive-ready .scene-copy,.immersive-ready .particle-code,.immersive-ready .particle-project,.immersive-ready .particle-note,.immersive-ready .final-copy,.immersive-ready .particle-search,.immersive-ready .final-links { position: static; transform: none; width: 100%; margin-block: 20px; }
+ .flow-labels,.return-intro { display: none!important; }
+}

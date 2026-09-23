@@ -1,7 +1,44 @@
 {{ define "main" }}
-<nav class="chapter-rail" aria-label="홈 섹션"><a href="#intro" aria-label="00 소개" aria-current="location"><span>00</span><i></i></a><a href="#work" aria-label="01 프로젝트"><span>01</span><i></i></a><a href="#notes" aria-label="02 노트"><span>02</span><i></i></a><a href="#stories" aria-label="03 벨로그"><span>03</span><i></i></a></nav>
-<section class="hero shell" id="intro" aria-labelledby="hero-title"><p class="hero-kicker mono">A PERSONAL LAB JOURNAL</p><div class="hero-stage"><h1 id="hero-title" class="hero-title particle-fallback">Alcedo</h1><canvas id="hero-particles" aria-hidden="true"></canvas></div><div class="hero-copy"><h2>만들어 보고, 끝까지 파고듭니다.</h2><p>{{ site.Params.description }}</p><a class="pill-link" href="#work">프로젝트 살펴보기 {{ partial "diagonal-arrow.html" . }}</a></div><div class="hero-baseline"><p class="mono">SYSTEMS <span>/</span> NETWORK <span>/</span> SECURITY</p><button class="particle-burst" data-particle-burst type="button" hidden>흩뜨리기 {{ partial "diagonal-arrow.html" . }}</button></div></section>
-<section class="shell work-section" id="work" aria-labelledby="work-title"><div class="section-intro"><span class="section-label mono">01 / SELECTED WORK</span><h2 id="work-title">생각의 흔적을,<br>동작하는 증거로.</h2><p>설계부터 검증까지,<br>작업의 맥락을 함께 기록합니다.</p><a class="text-link" href="{{ "projects/" | relURL }}">모든 프로젝트 {{ partial "arrow.html" . }}</a></div><div class="featured-projects">{{ range first 1 (where site.RegularPages "Section" "projects").ByDate.Reverse }}<article class="featured-project"><a class="project-visual" href="{{ .RelPermalink }}" aria-label="{{ .Title }} 프로젝트 읽기">{{ partial "publishing-diagram.html" . }}<span class="visual-caption mono">ONE EXPERIMENT. TWO PERSPECTIVES.</span></a><div class="project-info"><div class="project-meta mono"><span>01 / PERSONAL PROJECT</span><span>{{ .Params.period }}</span></div><h3><a href="{{ .RelPermalink }}">{{ .Title }}</a></h3><p>{{ .Params.summary }}</p><div class="project-bottom"><span class="mono">{{ delimit .Params.stack " / " }}</span><a class="text-link" href="{{ .RelPermalink }}">프로젝트 읽기 {{ partial "diagonal-arrow.html" . }}</a></div></div></article>{{ end }}</div></section>
-<section class="shell notes-section" id="notes" aria-labelledby="notes-title"><header class="notes-heading"><h2 id="notes-title">Field notes<span>.</span></h2><p>실험 전에 정리하고,<br>실험 후에 고칩니다.</p><a class="text-link" href="{{ "notes/" | relURL }}">모든 노트 {{ partial "arrow.html" . }}</a></header><div class="notes-content"><span class="section-label mono">02 / NOTES</span><div class="note-list">{{ range $i,$p := first 4 (where site.RegularPages "Section" "notes").ByWeight }}{{ partial "note-row.html" (dict "page" $p "index" (add $i 1)) }}{{ end }}</div></div></section>
-<section class="shell story-section" id="stories" aria-labelledby="story-title"><div><span class="section-label mono">03 / THE OTHER SIDE</span><h2 id="story-title">조금은 가볍게,<br><em>하지만 정확하게.</em></h2></div><div class="story-copy"><p>삽질의 과정과 쉬운 설명은 벨로그에 남깁니다.<br>같은 실험에서 출발한, 또 다른 이야기.</p><a class="pill-link" href="{{ site.Params.velogURL }}">alcedo.log 방문하기 {{ partial "diagonal-arrow.html" . }}</a></div></section>
+<canvas id="story-particles" aria-hidden="true"></canvas>
+<nav id="story-navigation" class="story-navigation" aria-label="장면 선택" tabindex="-1">
+  {{ range $i, $scene := slice (dict "id" "intro" "name" "Alcedo") (dict "id" "lab" "name" "홈랩") (dict "id" "work" "name" "프로젝트") (dict "id" "notes" "name" "노트") (dict "id" "stories" "name" "발행") (dict "id" "explore" "name" "기록 찾기") }}
+  <a href="#{{ $scene.id }}" data-scene="{{ $i }}" aria-label="{{ printf "%02d" $i }} {{ $scene.name }}"{{ if eq $i 0 }} aria-current="step"{{ end }}><span>{{ printf "%02d" $i }}</span><i></i></a>
+  {{ end }}
+</nav>
+<div class="particle-story">
+  <section class="story-scene story-intro" data-panel="0" id="intro" aria-labelledby="story-title"><h1 id="story-title" class="story-title">Alcedo</h1></section>
+  <section class="story-scene story-side" data-panel="1" id="lab" aria-labelledby="lab-title">
+    <div class="scene-copy"><p class="scene-eyebrow">01 — HOMELAB</p><h2 id="lab-title">연결을 이해하고,<br>경계를 설계합니다.</h2><p class="scene-description">홈랩과 보안을 공부하며,<br>보이지 않는 구조를 하나씩 확인합니다.</p><div class="scene-topics"><span>NETWORK</span><span>VIRTUALIZATION</span><span>SECURITY</span></div><a class="scene-link" href="{{ "about/" | relURL }}">어떤 기록을 남기는가 {{ partial "arrow.html" . }}</a></div>
+    <p class="diagram-note">연결과 경계를 표현한 개념도</p>
+  </section>
+  <section class="story-scene story-side" data-panel="2" id="work" aria-labelledby="work-title">
+    <div class="scene-copy"><p class="scene-eyebrow">02 — PROJECTS</p><h2 id="work-title">생각은 코드로,<br>코드는 동작으로.</h2><p class="scene-description">만드는 과정과 선택한 이유,<br>실제로 확인한 결과까지.</p><a class="scene-link" href="{{ "projects/" | relURL }}">프로젝트 모아 보기 {{ partial "arrow.html" . }}</a></div>
+    <div class="particle-code" data-particle-code aria-label="이 사이트의 Hugo 설정 예시"><span class="frame-label">hugo.toml</span><pre><code><span class="code-muted"># Homelab Notes</span>
+title = <span class="code-accent">'Homelab Notes'</span>
+locale = <span class="code-accent">'ko-KR'</span>
+
+[params]
+  author = <span class="code-accent">'Alcedo'</span>
+
+<span class="code-muted"># Build → Verify → Deploy</span></code></pre></div>
+    {{ range first 1 (where site.RegularPages "Section" "projects").ByDate.Reverse }}
+    <article class="particle-project" data-particle-project><div class="frame-label"><span>SELECTED PROJECT</span><span>{{ .Params.period }}</span></div><h3>{{ .Title }}</h3><p>{{ .Params.summary }}</p><div class="project-scene-links"><a href="{{ .RelPermalink }}">기록 읽기 {{ partial "arrow.html" . }}</a>{{ with .Params.repository }}<a href="{{ . }}">소스 {{ partial "diagonal-arrow.html" $ }}</a>{{ end }}</div></article>
+    {{ end }}
+  </section>
+  <section class="story-scene story-side" data-panel="3" id="notes" aria-labelledby="notes-title">
+    <div class="scene-copy"><p class="scene-eyebrow">03 — FIELD NOTES</p><h2 id="notes-title">흩어진 경험을,<br>다시 꺼낼 지식으로.</h2><p class="scene-description">절차와 조건을 적고,<br>미래의 내가 다시 실행할 수 있게.</p><a class="scene-link" href="{{ "notes/" | relURL }}">노트 모아 보기 {{ partial "arrow.html" . }}</a></div>
+    <div class="particle-notes">{{ range $i,$note := first 2 (where site.RegularPages "Section" "notes").ByWeight }}<a class="particle-note" data-particle-note href="{{ $note.RelPermalink }}"><span class="frame-label">{{ printf "%02d" (add $i 1) }} / {{ $note.Params.category }}</span><h3>{{ $note.Title }}</h3><p>{{ $note.Params.summary }}</p><span class="note-open">노트 읽기 {{ partial "arrow.html" $ }}</span></a>{{ end }}</div>
+  </section>
+  <section class="story-scene story-side" data-panel="4" id="stories" aria-labelledby="stories-title">
+    <div class="scene-copy"><p class="scene-eyebrow">04 — ONE EXPERIMENT</p><h2 id="stories-title">하나의 실험,<br>두 가지 이야기.</h2><p class="scene-description">기술적인 근거는 이곳에.<br>웃으며 읽는 삽질 이야기는 벨로그에.</p><a class="scene-link" href="{{ site.Params.velogURL }}">alcedo.log {{ partial "diagonal-arrow.html" . }}</a></div>
+    <p class="visually-hidden">하나의 실험에서 Hugo 기술 문서, Velog의 쉬운 이야기, GitHub 구현 자료가 갈라져 나오고, 서로 연결된 기록으로 모입니다.</p>
+    <div class="flow-labels" aria-hidden="true"><span class="flow-source">실험</span><span class="flow-technical">HUGO<span>기술 문서</span></span><span class="flow-story">VELOG<span>쉬운 이야기</span></span><span class="flow-code">GITHUB<span>구현 자료</span></span><span class="flow-result">기록</span></div>
+  </section>
+  <section class="story-scene story-finale" data-panel="5" id="explore" aria-labelledby="explore-title">
+    <div class="final-copy"><p class="scene-eyebrow">05 — KEEP ASKING</p><h2 id="explore-title">다음 기록을,<br class="mobile-break"> 찾아보세요.</h2></div>
+    <form class="particle-search" action="{{ "search/" | relURL }}" method="get"><div class="particle-search-wrap" data-particle-final><label class="visually-hidden" for="story-query">기록 검색</label><input id="story-query" name="q" type="search" placeholder="어떤 기록이 궁금한가요?" autocomplete="off"><button type="submit" data-particle-final-button aria-label="기록 검색하기">{{ partial "arrow.html" . }}</button></div><p class="search-caption">HOMELAB · NETWORK · SECURITY</p></form>
+    <nav class="final-links" aria-label="기록 더 보기"><a href="{{ "projects/" | relURL }}">Projects</a><a href="{{ "notes/" | relURL }}">Notes</a><a href="{{ site.Params.githubURL }}">GitHub</a><a href="{{ site.Params.velogURL }}">Velog</a></nav><a class="return-intro" href="#intro" data-scene="0">처음으로 ↑</a>
+  </section>
+</div>
+<div id="story-track" aria-hidden="true"></div>
 {{ end }}

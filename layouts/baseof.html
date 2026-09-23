@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko" data-theme="ink">
+<html lang="ko" data-theme="ink"{{ if .IsHome }} data-story-intro="true"{{ end }}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -26,16 +26,18 @@
   {{ $js := resources.Get "js/main.js" | minify | fingerprint }}
   <script src="{{ $js.RelPermalink }}" integrity="{{ $js.Data.Integrity }}" defer></script>
   {{ if .IsHome }}
+  {{ $storyCSS := resources.Get "css/experience.css" | minify | fingerprint }}
+  <link rel="stylesheet" href="{{ $storyCSS.RelPermalink }}" integrity="{{ $storyCSS.Data.Integrity }}">
   {{ $experience := resources.Get "js/experience.js" | js.Build (dict "targetPath" "js/experience.js" "format" "esm" "target" "es2020" "minify" true) | fingerprint }}
   <script type="module" src="{{ $experience.RelPermalink }}" integrity="{{ $experience.Data.Integrity }}"></script>
   {{ end }}
 </head>
-<body data-search-index="{{ "index.json" | relURL }}">
+<body{{ if .IsHome }} class="story-home"{{ end }} data-search-index="{{ "index.json" | relURL }}">
   <div class="grain" aria-hidden="true"></div>
-  <a class="skip-link" href="#main">본문으로 건너뛰기</a>
-  {{ partial "header.html" . }}
+  <a class="skip-link" href="{{ if .IsHome }}#lab{{ else }}#main{{ end }}"{{ if .IsHome }} data-scene="1"{{ end }}>본문으로 건너뛰기</a>
+  {{ if .IsHome }}{{ partial "story-header.html" . }}{{ else }}{{ partial "header.html" . }}{{ end }}
   <main id="main" tabindex="-1">{{ block "main" . }}{{ end }}</main>
-  {{ partial "footer.html" . }}
+  {{ if not .IsHome }}{{ partial "footer.html" . }}{{ end }}
   {{ partial "search-dialog.html" . }}
 </body>
 </html>
