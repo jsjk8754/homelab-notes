@@ -101,6 +101,9 @@
     const openSearch = () => { if (!dialog.open) dialog.showModal(); input.focus(); };
     document.querySelectorAll('[data-search-open]').forEach(link => link.addEventListener('click',event => { event.preventDefault(); openSearch(); }));
     dialog.querySelector('[data-search-close]').addEventListener('click',() => dialog.close());
+    dialog.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { event.preventDefault(); dialog.close(); }
+    });
     dialog.addEventListener('click',event => {
       if (event.target !== dialog) return;
       const rect = dialog.getBoundingClientRect();
