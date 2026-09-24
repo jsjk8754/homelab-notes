@@ -4,6 +4,8 @@
 
 홈랩과 보안 실습을 기술 포트폴리오로 정리하는 Hugo 사이트입니다. 검증된 기술 글과 프로젝트는 이 사이트에, 편하게 읽는 개그톤 이야기는 [Velog @alcedo](https://velog.io/@alcedo)에 올립니다. GitHub 저장소에는 글에서 참조하는 설정, 코드, 재현 절차를 함께 남깁니다.
 
+보안·홈랩·서버 관련 기록은 **Hugo 원문 먼저 → 검증과 발행 → 원문을 바탕으로 Velog 각색** 순서로 작성합니다. [작성 기준](AGENTS.md)과 [발행 가이드](docs/writing-guide.md)에 분류, 근거, 말투와 두 글의 수정 순서를 정리했습니다.
+
 홈은 첫 진입에서 입자로 만든 `Alcedo`만 보여주고, 스크롤에 따라 같은 입자 풀이 네트워크 트리, 프로젝트·코드 윤곽, 노트, Hugo·Velog·GitHub 발행 흐름, 검색창으로 이어지는 여섯 장면으로 변형되는 인터랙티브 입구입니다. 기술 글은 `/projects/`, `/notes/`, `/about/`, `/search/`의 정적 경로에서 움직임과 무관하게 직접 열고 공유할 수 있습니다.
 
 ## 글의 역할
@@ -12,6 +14,8 @@
 - `content/notes/`: 명령어, 개념, 장애 해결처럼 다시 찾을 기술 노트
 - `stories/`: Velog에 직접 게시하기 전 보관하는 개그톤 초안. GitHub Pages에는 표시되지 않습니다.
 - `static/`: 공개 이미지와 다운로드 파일. 비밀번호, 토큰, 공인 IP, 내부 호스트 이름처럼 노출하면 안 되는 정보는 넣지 않습니다.
+
+이 저장소는 공개되어 있으므로 초안도 GitHub에서는 읽을 수 있습니다. `draft = true`는 비공개 저장 기능이 아닙니다.
 
 ## 처음 설정할 항목
 
@@ -59,10 +63,11 @@ Hugo가 다른 위치에 있다면 `HUGO_BIN=/path/to/hugo make check`처럼 지
 
 ## Velog 초안 만들기
 
-도구는 파일만 변환하며 Velog에 로그인하거나 게시하지 않습니다.
+먼저 완성한 Hugo 원문을 바탕으로 [글 틀](docs/templates/velog-story.md)을 참고해 `stories/<같은-slug>.md`에 별도 이야기를 작성합니다. 아래 도구는 파일 형식과 링크만 변환합니다. 글을 각색하거나 Velog에 로그인·게시하지 않습니다.
 
 ```sh
-python3 scripts/export-velog.py content/notes/proxmox-backup-check/index.md \
+python3 scripts/export-velog.py stories/proxmox-backup-check.md \
+  --article-url https://jsjk8754.github.io/homelab-notes/notes/proxmox-backup-check/ \
   --output /tmp/proxmox-backup-check.velog.md
 ```
 
