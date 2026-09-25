@@ -1,3 +1,5 @@
+import { READER_MOTION, smoother } from './reader-motion.js';
+
 const TAU = Math.PI * 2;
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const mix = (from, to, amount) => from + (to - from) * amount;
@@ -964,19 +966,33 @@ export class ParticleExperience {
     if (!prepared.targets || !morph.captured) return;
     const width = Math.max(1, this.width);
     const height = Math.max(1, this.height);
-    const curve = new Float32Array(this.count * 2);
+    const viewportScale = Math.min(width, height);
+    const curve = new Float32Array(this.count * 5);
     for (let i = 0; i < this.count; i += 1) {
       const particle = i * 7;
       const glyph = i * 6;
-      const coefficient = i * 2;
+      const coefficient = i * 5;
       const targetX = prepared.targets[glyph];
       const targetY = prepared.targets[glyph + 1];
       const dx = targetX - morph.captured[particle];
       const dy = targetY - morph.captured[particle + 1];
-      const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-      const field = Math.sin((targetX / width * 1.45 + targetY / height * 1.15) * TAU) * 6.5;
-      curve[coefficient] = -(dy / distance) * field;
-      curve[coefficient + 1] = (dx / distance) * field;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const inverseDistance = distance > 0 ? 1 / distance : 0;
+      const nx = targetX / width;
+      const ny = targetY / height;
+      const primaryField = 0.74 + 0.26 * Math.sin((nx * 0.82 + ny * 0.54) * TAU);
+      const primaryMagnitude = Math.min(distance * 0.18, viewportScale * 0.055) * primaryField;
+      const currentField = 0.76 + 0.24 * Math.cos((nx * 0.47 - ny * 0.31) * TAU);
+      const currentMagnitude = Math.min(distance * 0.06, viewportScale * 0.022) * currentField;
+      const currentAngle = (nx * 0.58 - ny * 0.36) * Math.PI;
+      const delayUnit = clamp(0.5
+        + 0.28 * Math.sin(nx * TAU * 0.55)
+        + 0.22 * Math.cos(ny * TAU * 0.45));
+      curve[coefficient] = -dy * inverseDistance * primaryMagnitude;
+      curve[coefficient + 1] = dx * inverseDistance * primaryMagnitude;
+      curve[coefficient + 2] = Math.cos(currentAngle) * currentMagnitude;
+      curve[coefficient + 3] = Math.sin(currentAngle) * currentMagnitude;
+      curve[coefficient + 4] = delayUnit * READER_MOTION.open.stagger;
     }
     morph.glyphCurve = curve;
   }
@@ -994,21 +1010,34 @@ export class ParticleExperience {
     if (!from.targets || !to.targets) return;
     const width = Math.max(1, this.width);
     const height = Math.max(1, this.height);
-    const curve = new Float32Array(this.count * 2);
+    const viewportScale = Math.min(width, height);
+    const curve = new Float32Array(this.count * 5);
     for (let i = 0; i < this.count; i += 1) {
       const glyph = i * 6;
-      const coefficient = i * 2;
+      const coefficient = i * 5;
       const fromX = from.targets[glyph];
       const fromY = from.targets[glyph + 1];
       const toX = to.targets[glyph];
       const toY = to.targets[glyph + 1];
       const dx = toX - fromX;
       const dy = toY - fromY;
-      const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-      const field = Math.sin(((fromX + toX) / width * 0.72 + (fromY + toY) / height * 0.58) * TAU);
-      const strength = page.direction * (7.5 + field * 3.2);
-      curve[coefficient] = -(dy / distance) * strength;
-      curve[coefficient + 1] = (dx / distance) * strength;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const inverseDistance = distance > 0 ? 1 / distance : 0;
+      const nx = (fromX + toX) * 0.5 / width;
+      const ny = (fromY + toY) * 0.5 / height;
+      const primaryField = 0.72 + 0.28 * Math.sin((nx * 0.76 + ny * 0.48) * TAU);
+      const primaryMagnitude = Math.min(distance * 0.2, viewportScale * 0.06) * primaryField * page.direction;
+      const currentField = 0.76 + 0.24 * Math.cos((nx * 0.44 - ny * 0.34) * TAU);
+      const currentMagnitude = Math.min(distance * 0.065, viewportScale * 0.024) * currentField;
+      const currentAngle = (nx * 0.52 - ny * 0.38) * Math.PI;
+      const delayUnit = clamp(0.5
+        + 0.3 * Math.sin(nx * TAU * 0.52)
+        + 0.2 * Math.cos(ny * TAU * 0.48));
+      curve[coefficient] = -dy * inverseDistance * primaryMagnitude;
+      curve[coefficient + 1] = dx * inverseDistance * primaryMagnitude;
+      curve[coefficient + 2] = Math.cos(currentAngle) * currentMagnitude;
+      curve[coefficient + 3] = Math.sin(currentAngle) * currentMagnitude;
+      curve[coefficient + 4] = delayUnit * READER_MOTION.page.stagger;
     }
     page.curve = curve;
   }
@@ -1030,11 +1059,9 @@ export class ParticleExperience {
     const targets = morph.glyphTargets;
     const curveTargets = morph.glyphCurve;
     const hasGlyphs = Boolean(targets?.length && curveTargets?.length);
-    const fallbackVisibility = 1 - smooth(0, 0.26, amount);
-    const glyphVisibility = 1 - smooth(0.72, 1, amount);
-    const alphaMix = smooth(0, 0.26, amount);
-    const colorMix = smooth(0.18, 0.68, amount);
-    const phaseEnvelope = 0.034 * Math.sin(amount * Math.PI);
+    const motion = READER_MOTION.open;
+    const fallbackVisibility = 1 - smoother(0, 0.26, amount);
+    const glyphVisibility = 1 - smoother(motion.handoff, 1, amount);
     for (let i = 0; i < this.count; i += 1) {
       const particle = i * 7;
       const position = i * 4;
@@ -1049,21 +1076,28 @@ export class ParticleExperience {
       let alpha = morph.captured[particle + 6] * fallbackVisibility;
       if (hasGlyphs) {
         const glyph = i * 6;
-        const coefficient = i * 2;
+        const coefficient = i * 5;
         const targetX = targets[glyph];
         const targetY = targets[glyph + 1];
-        const phase = (this.seed[position] - 0.5) * phaseEnvelope;
-        const travel = smooth(0, 0.68, clamp(amount + phase));
-        const curveEnvelope = Math.sin(travel * Math.PI);
-        x = mix(originX, targetX, travel) + curveTargets[coefficient] * curveEnvelope;
-        y = mix(originY, targetY, travel) + curveTargets[coefficient + 1] * curveEnvelope;
+        const delay = curveTargets[coefficient + 4];
+        const travel = smoother(motion.start + delay, motion.end + delay, amount);
+        const inverseTravel = 1 - travel;
+        const archEnvelope = 64 * travel * travel * travel
+          * inverseTravel * inverseTravel * inverseTravel;
+        const currentEnvelope = archEnvelope * (1 - 2 * travel);
+        x = mix(originX, targetX, travel)
+          + curveTargets[coefficient] * archEnvelope
+          + curveTargets[coefficient + 2] * currentEnvelope;
+        y = mix(originY, targetY, travel)
+          + curveTargets[coefficient + 1] * archEnvelope
+          + curveTargets[coefficient + 3] * currentEnvelope;
         const coverage = targets[glyph + 5];
         const glyphSize = 0.72 + coverage * 0.56 + this.seed[position + 3] * 0.14;
         size = mix(morph.captured[particle + 2], glyphSize, travel);
-        r = mix(morph.captured[particle + 3], targets[glyph + 2], colorMix);
-        g = mix(morph.captured[particle + 4], targets[glyph + 3], colorMix);
-        b = mix(morph.captured[particle + 5], targets[glyph + 4], colorMix);
-        alpha = mix(morph.captured[particle + 6], coverage, alphaMix) * glyphVisibility;
+        r = mix(morph.captured[particle + 3], targets[glyph + 2], travel);
+        g = mix(morph.captured[particle + 4], targets[glyph + 3], travel);
+        b = mix(morph.captured[particle + 5], targets[glyph + 4], travel);
+        alpha = mix(morph.captured[particle + 6], coverage, travel) * glyphVisibility;
       }
       this.xyz[position] = x;
       this.xyz[position + 1] = y;
@@ -1089,9 +1123,9 @@ export class ParticleExperience {
     const to = page.toTargets;
     const curveTargets = page.curve;
     const hasGlyphs = Boolean(from?.length && to?.length && curveTargets?.length);
-    const appear = smooth(0, 0.18, amount);
-    const fade = 1 - smooth(0.78, 1, amount);
-    const phaseEnvelope = 0.038 * Math.sin(smooth(0.16, 0.74, amount) * Math.PI);
+    const motion = READER_MOTION.page;
+    const appear = smoother(0, motion.release, amount);
+    const fade = 1 - smoother(motion.handoff, 1, amount);
     for (let i = 0; i < this.count; i += 1) {
       const position = i * 4;
       const particle = i * 7;
@@ -1104,16 +1138,23 @@ export class ParticleExperience {
       let alpha = 0;
       if (hasGlyphs) {
         const glyph = i * 6;
-        const coefficient = i * 2;
+        const coefficient = i * 5;
         const fromX = from[glyph];
         const fromY = from[glyph + 1];
         const toX = to[glyph];
         const toY = to[glyph + 1];
-        const phase = (this.seed[position] - 0.5) * phaseEnvelope;
-        const travel = smooth(0.16, 0.74, clamp(amount + phase));
-        const curveEnvelope = Math.sin(travel * Math.PI);
-        x = mix(fromX, toX, travel) + curveTargets[coefficient] * curveEnvelope;
-        y = mix(fromY, toY, travel) + curveTargets[coefficient + 1] * curveEnvelope;
+        const delay = curveTargets[coefficient + 4];
+        const travel = smoother(motion.start + delay, motion.end + delay, amount);
+        const inverseTravel = 1 - travel;
+        const archEnvelope = 64 * travel * travel * travel
+          * inverseTravel * inverseTravel * inverseTravel;
+        const currentEnvelope = archEnvelope * (1 - 2 * travel);
+        x = mix(fromX, toX, travel)
+          + curveTargets[coefficient] * archEnvelope
+          + curveTargets[coefficient + 2] * currentEnvelope;
+        y = mix(fromY, toY, travel)
+          + curveTargets[coefficient + 1] * archEnvelope
+          + curveTargets[coefficient + 3] * currentEnvelope;
         const fromCoverage = from[glyph + 5];
         const toCoverage = to[glyph + 5];
         const coverage = mix(fromCoverage, toCoverage, travel);

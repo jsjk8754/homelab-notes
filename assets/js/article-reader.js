@@ -1,4 +1,5 @@
 import { captureArticleGlyphs } from './article-glyphs.js';
+import { READER_MOTION, smoother } from './reader-motion.js';
 
 const clamp = value => Math.max(0, Math.min(1, value));
 const smooth = (start, end, value) => { const t = clamp((value - start) / (end - start)); return t * t * (3 - 2 * t); };
@@ -79,13 +80,13 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
     root.style.setProperty('--reader-home-opacity', String(1 - smooth(0, .26, amount)));
     overlay.style.setProperty('--reader-reveal', String(smooth(.14, .52, amount)));
     // The grains first form readable glyphs; only then does the matching DOM take over.
-    content.style.opacity = String(engine.metrics.documentGlyphs ? smooth(.72, 1, amount) : smooth(.12, .52, amount));
+    content.style.opacity = String(engine.metrics.documentGlyphs ? smoother(READER_MOTION.open.handoff, 1, amount) : smooth(.12, .52, amount));
     engine.setDocumentMorph(amount, end, start);
   }
   function animate(destination, complete) {
     cancelAnimationFrame(animation);
     const from = amount;
-    const duration = motion.matches ? 0 : (destination ? 1850 : 1350) * Math.abs(destination - from);
+    const duration = motion.matches ? 0 : (destination ? READER_MOTION.open.duration : READER_MOTION.open.closeDuration) * Math.abs(destination - from);
     let elapsedTime = 0, previousFrame = performance.now();
     const deadline = previousFrame + duration + 2000;
     const tick = now => {
@@ -187,8 +188,8 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
     const rect = expandedRect();
     const glyphs = engine.metrics.pageGlyphs;
     const canFormText = Boolean(glyphs?.from && glyphs?.to);
-    content.style.opacity = String(1 - smooth(0, canFormText ? .18 : 1, value));
-    turn.incoming.style.opacity = String(smooth(canFormText ? .78 : 0, 1, value));
+    content.style.opacity = String(1 - smoother(0, canFormText ? READER_MOTION.page.release : 1, value));
+    turn.incoming.style.opacity = String(smoother(canFormText ? READER_MOTION.page.handoff : 0, 1, value));
     engine.setPageTurn(value, rect);
   }
   function finishTurn({ focus = true } = {}) {
@@ -260,12 +261,13 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
       await waitForFonts(incoming);
       if (token !== revision || turn !== nextTurn || !active()) return;
       refreshGlyphs();
+      const duration = READER_MOTION.page.duration;
       let elapsedTime = 0, previousFrame = performance.now();
-      const deadline = previousFrame + 3800;
+      const deadline = previousFrame + duration + 2000;
       const tick = now => {
         elapsedTime += Math.min(48, Math.max(0, now - previousFrame));
         previousFrame = now;
-        const value = motion.matches || engine.metrics.renderer === 'static' || now >= deadline ? 1 : clamp(elapsedTime / 1800);
+        const value = motion.matches || engine.metrics.renderer === 'static' || now >= deadline ? 1 : clamp(elapsedTime / duration);
         renderTurn(value);
         if (value < 1) animation = requestAnimationFrame(tick);
         else finishTurn();
