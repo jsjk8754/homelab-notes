@@ -122,13 +122,16 @@
     const query = new URLSearchParams(location.search).get('q');
     if (query) { searchPage.querySelector('[data-search-input]').value = query; render(); }
   }
-  document.querySelectorAll('.prose table').forEach(table => {
-    const wrapper = document.createElement('div'); wrapper.className = 'table-scroll';
-    wrapper.tabIndex = 0; wrapper.setAttribute('role','region'); wrapper.setAttribute('aria-label','표, 가로로 스크롤할 수 있습니다');
-    table.before(wrapper); wrapper.append(table);
-  });
-  if (navigator.clipboard?.writeText) {
-    document.querySelectorAll('.prose .highlight').forEach(block => {
+  function enhanceArticle(container) {
+    container.querySelectorAll('.prose table').forEach(table => {
+      if (table.closest('.table-scroll')) return;
+      const wrapper = document.createElement('div'); wrapper.className = 'table-scroll';
+      wrapper.tabIndex = 0; wrapper.setAttribute('role','region'); wrapper.setAttribute('aria-label','표, 가로로 스크롤할 수 있습니다');
+      table.before(wrapper); wrapper.append(table);
+    });
+    if (!navigator.clipboard?.writeText) return;
+    container.querySelectorAll('.prose .highlight').forEach(block => {
+      if (block.querySelector('.code-copy')) return;
       const code = block.querySelector('pre code'); if (!code) return;
       const button = document.createElement('button'); button.type = 'button'; button.className = 'code-copy'; button.textContent = '복사'; button.setAttribute('aria-label','코드 복사');
       button.addEventListener('click',async () => {
@@ -138,13 +141,19 @@
       });
       block.append(button);
     });
-    document.querySelectorAll('[data-copy-link]').forEach(button => {
+    container.querySelectorAll('[data-copy-link]').forEach(button => {
+      if (button.dataset.copyReady) return;
+      button.dataset.copyReady = 'true';
       button.hidden = false;
       button.addEventListener('click',async () => {
-        const status = document.querySelector('[data-copy-status]');
+        const status = container.querySelector('[data-copy-status]');
         try { await navigator.clipboard.writeText(document.querySelector('link[rel="canonical"]').href); status.textContent = '글 주소를 복사했습니다.'; }
         catch { status.textContent = '주소창에서 글 주소를 복사해 주세요.'; }
       });
     });
   }
+  enhanceArticle(document);
+  document.addEventListener('articlemounted', event => {
+    if (event.detail instanceof HTMLElement) enhanceArticle(event.detail);
+  });
 })();

@@ -23,6 +23,15 @@ function copyRect(rect, canvasRect) {
   };
 }
 
+function updateRect(target, rect, canvasRect) {
+  if (!target || !rect || rect.width <= 0 || rect.height <= 0) return false;
+  target.x = (rect.x ?? rect.left) - canvasRect.left;
+  target.y = (rect.y ?? rect.top) - canvasRect.top;
+  target.width = rect.width;
+  target.height = rect.height;
+  return true;
+}
+
 /**
  * One persistent particle pool that morphs through six scroll-driven scenes.
  * Scene geometry is viewport-relative; the controller supplies live DOM rects.
@@ -59,6 +68,7 @@ export class ParticleExperience {
     this.renderer = 'static';
     this.poolVersion = 0;
     this.layout = {};
+    this.documentMorph = null;
     this.frame = this.frame.bind(this);
     this._onVisibility = this._onVisibility.bind(this);
     this._onContextLost = this._onContextLost.bind(this);
@@ -78,7 +88,8 @@ export class ParticleExperience {
     document.fonts?.load?.('italic 180px Instrument', this.titleText).then(() => {
       if (this.destroyed) return;
       this._makeTitle();
-      if (this.reduced) this._snapToTargets();
+      if (this.documentMorph) this._renderDocumentMorph();
+      else if (this.reduced) this._snapToTargets();
       else this._wake();
     }).catch(() => {});
   }
@@ -93,11 +104,14 @@ export class ParticleExperience {
       reduced: this.reduced,
       fps: this.fps,
       poolVersion: this.poolVersion,
+      documentMorph: this.documentMorph ? this.documentMorph.amount : null,
     };
   }
 
   resize(layout = {}) {
     if (this.destroyed) return this;
+    const previousWidth = this.width;
+    const previousHeight = this.height;
     const canvasRect = this.canvas.getBoundingClientRect();
     const width = Math.max(1, canvasRect.width || innerWidth);
     const height = Math.max(1, canvasRect.height || innerHeight);
@@ -108,6 +122,17 @@ export class ParticleExperience {
     this.height = height;
     this.mobile = mobile;
     this.dpr = dpr;
+    if (this.documentMorph && previousWidth > 0 && previousHeight > 0) {
+      const scaleX = width / previousWidth;
+      const scaleY = height / previousHeight;
+      for (const rect of [this.documentMorph.sourceRect, this.documentMorph.expandedRect]) {
+        if (!rect) continue;
+        rect.x *= scaleX;
+        rect.y *= scaleY;
+        rect.width *= scaleX;
+        rect.height *= scaleY;
+      }
+    }
     this.layout = {
       project: copyRect(layout.project, canvasRect),
       code: copyRect(layout.code, canvasRect),
@@ -131,21 +156,27 @@ export class ParticleExperience {
 
     if (breakpointChanged) this._allocatePool();
     this._buildGeometry();
-    if (this.reduced) this._snapToTargets();
+    if (this.documentMorph) {
+      this._snapToTargets();
+      this._captureDocumentMorph(this.documentMorph.sourceRect);
+      this._renderDocumentMorph();
+    } else if (this.reduced) this._snapToTargets();
     else this._wake();
     return this;
   }
 
   setProgress(value) {
     this.progress = clamp(Number(value) || 0, 0, 5.82);
-    if (this.reduced) this._snapToTargets();
+    if (this.documentMorph) this._renderDocumentMorph();
+    else if (this.reduced) this._snapToTargets();
     else this._wake();
     return this;
   }
 
   setTheme(theme = 'ink') {
     this.theme = theme === 'paper' ? 'paper' : 'ink';
-    if (this.reduced) this._renderStatic();
+    if (this.documentMorph) this._renderDocumentMorph();
+    else if (this.reduced) this._renderStatic();
     else if (!this.wantsToRun) {
       if (this.first) this._snapToTargets();
       else this._renderStatic();
@@ -159,7 +190,8 @@ export class ParticleExperience {
     this._cancelFrame();
     this.waves.length = 0;
     this.last = performance.now();
-    if (this.reduced) this._snapToTargets();
+    if (this.documentMorph) this._renderDocumentMorph();
+    else if (this.reduced) this._snapToTargets();
     else this._wake();
     return this;
   }
@@ -179,6 +211,7 @@ export class ParticleExperience {
   }
 
   pulse(x = this.width / 2, y = this.height / 2, strength = 1) {
+    if (this.documentMorph) return this;
     this.waves.push({ x, y, start: this.time, strength });
     if (this.waves.length > 8) this.waves.shift();
     if (this.reduced) this._renderStatic();
@@ -187,6 +220,7 @@ export class ParticleExperience {
   }
 
   burst() {
+    if (this.documentMorph) return this;
     const rect = this.layout.project;
     const x = rect ? rect.x + rect.width / 2 : this.width / 2;
     const y = rect ? rect.y + rect.height / 2 : this.height / 2;
@@ -207,7 +241,8 @@ export class ParticleExperience {
     if (this.destroyed) return this;
     this.wantsToRun = true;
     this.last = performance.now();
-    if (this.reduced) this._snapToTargets();
+    if (this.documentMorph) this._renderDocumentMorph();
+    else if (this.reduced) this._snapToTargets();
     else this._wake();
     return this;
   }
@@ -218,10 +253,67 @@ export class ParticleExperience {
     return this;
   }
 
+  /**
+   * Freeze the current home-stage particles and mark the particles belonging to
+   * the selected card. Rects use viewport coordinates, matching DOMRect.
+   */
+  beginDocumentMorph(sourceRect) {
+    if (this.destroyed) return this;
+    const rect = copyRect(sourceRect, this.canvas.getBoundingClientRect());
+    if (!rect) return this;
+    if (this.documentMorph) this.endDocumentMorph();
+    if (this.first) this._snapToTargets();
+    this._cancelFrame();
+    this.documentMorph = {
+      amount: 0,
+      sourceRect: rect,
+      expandedRect: { ...rect },
+      direction: 1,
+      captured: null,
+      normalized: null,
+      selected: null,
+      selectedCount: 0,
+    };
+    this._captureDocumentMorph(rect);
+    this._renderDocumentMorph();
+    this._dispatchState();
+    return this;
+  }
+
+  /**
+   * Render one synchronous frame of the card-to-reader transition. At one the
+   * selected paper has reached the reader bounds and every particle is quiet.
+   */
+  setDocumentMorph(amount, expandedRect, sourceRect) {
+    const morph = this.documentMorph;
+    if (!morph || this.destroyed) return this;
+    const canvasRect = this.canvas.getBoundingClientRect();
+    updateRect(morph.expandedRect, expandedRect, canvasRect);
+    updateRect(morph.sourceRect, sourceRect, canvasRect);
+    const nextAmount = clamp(Number(amount) || 0);
+    if (nextAmount > morph.amount) morph.direction = 1;
+    else if (nextAmount < morph.amount) morph.direction = -1;
+    morph.amount = nextAmount;
+    this._renderDocumentMorph();
+    return this;
+  }
+
+  /** Restore the scroll scene and its original run state after the reverse fold. */
+  endDocumentMorph() {
+    if (!this.documentMorph) return this;
+    this.documentMorph = null;
+    this.last = performance.now();
+    this._snapToTargets();
+    if (this.wantsToRun && !this.reduced) this._wake();
+    this._dispatchState();
+    return this;
+  }
+
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
     this.wantsToRun = false;
+    this.documentMorph = null;
     this._cancelFrame();
     document.removeEventListener('visibilitychange', this._onVisibility);
     this.canvas.removeEventListener('webglcontextlost', this._onContextLost);
@@ -681,6 +773,122 @@ export class ParticleExperience {
     this.buffer[offset + 6] = target[3];
   }
 
+  _captureDocumentMorph(sourceRect) {
+    const morph = this.documentMorph;
+    if (!morph || !this.xyz || !this.buffer) return;
+    const captureLength = this.count * 7;
+    const normalizedLength = this.count * 2;
+    if (!morph.captured || morph.captured.length !== captureLength) {
+      morph.captured = new Float32Array(captureLength);
+      morph.normalized = new Float32Array(normalizedLength);
+      morph.selected = new Uint8Array(this.count);
+    }
+    morph.captured.set(this.buffer);
+    morph.selected.fill(0);
+    morph.selectedCount = 0;
+    const stage = Math.min(5, Math.floor(this.progress));
+    const local = stage === 2 ? 0.45 : stage === 3 ? 0.25 : clamp(this.progress - stage, 0, 0.55);
+    const stableTarget = new Float32Array(5);
+    const padding = Math.max(5, Math.min(sourceRect.width, sourceRect.height) * 0.025);
+    const left = sourceRect.x - padding;
+    const top = sourceRect.y - padding;
+    const right = sourceRect.x + sourceRect.width + padding;
+    const bottom = sourceRect.y + sourceRect.height + padding;
+    const safeWidth = Math.max(1, sourceRect.width);
+    const safeHeight = Math.max(1, sourceRect.height);
+    for (let i = 0; i < this.count; i += 1) {
+      const map = i * 2;
+      this._target(stage, i, local, stableTarget);
+      const stableX = stableTarget[0];
+      const stableY = stableTarget[1];
+      morph.normalized[map] = (stableX - sourceRect.x) / safeWidth;
+      morph.normalized[map + 1] = (stableY - sourceRect.y) / safeHeight;
+      if (i >= this.count * 0.09 && stableX >= left && stableX <= right && stableY >= top && stableY <= bottom) {
+        morph.selected[i] = 1;
+        morph.selectedCount += 1;
+      }
+    }
+
+    // Keep a deterministic paper outline if the supplied rectangle does not
+    // overlap the current scene geometry, without replacing the particle pool.
+    if (morph.selectedCount < Math.min(96, this.count)) {
+      morph.selected.fill(0);
+      morph.selectedCount = 0;
+      const desired = Math.max(1, Math.floor(this.count * 0.48));
+      for (let i = 0; i < desired; i += 1) {
+        const seed = i * 4;
+        const map = i * 2;
+        const side = Math.floor(this.seed[seed] * 4);
+        const along = this.seed[seed + 1];
+        morph.selected[i] = 1;
+        morph.selectedCount += 1;
+        if (side === 0) {
+          morph.normalized[map] = along;
+          morph.normalized[map + 1] = 0;
+        } else if (side === 1) {
+          morph.normalized[map] = 1;
+          morph.normalized[map + 1] = along;
+        } else if (side === 2) {
+          morph.normalized[map] = 1 - along;
+          morph.normalized[map + 1] = 1;
+        } else {
+          morph.normalized[map] = 0;
+          morph.normalized[map + 1] = 1 - along;
+        }
+      }
+    }
+  }
+
+  _renderDocumentMorph() {
+    const morph = this.documentMorph;
+    if (!morph?.captured || !this.xyz || !this.buffer) return;
+    const amount = morph.amount;
+    const travel = smooth(0, 0.84, amount);
+    const otherVisibility = 1 - smooth(0, 0.28, amount);
+    const paperVisibility = 1 - smooth(0.72, 1, amount);
+    const source = morph.sourceRect;
+    const expanded = morph.expandedRect || source;
+    for (let i = 0; i < this.count; i += 1) {
+      const particle = i * 7;
+      const position = i * 4;
+      let x = morph.captured[particle];
+      let y = morph.captured[particle + 1];
+      let alpha = morph.captured[particle + 6] * otherVisibility;
+      let size = morph.captured[particle + 2];
+      if (morph.selected[i]) {
+        const map = i * 2;
+        const nx = morph.normalized[map];
+        const ny = morph.normalized[map + 1];
+        const collapsedX = source.x + nx * source.width;
+        const collapsedY = source.y + ny * source.height;
+        const expandedX = expanded.x + nx * expanded.width;
+        const expandedY = expanded.y + ny * expanded.height;
+        const originX = morph.direction < 0 ? collapsedX : morph.captured[particle];
+        const originY = morph.direction < 0 ? collapsedY : morph.captured[particle + 1];
+        x = mix(originX, expandedX, travel);
+        y = mix(originY, expandedY, travel);
+        const capturedAlpha = morph.captured[particle + 6];
+        const dominantAlpha = Math.max(capturedAlpha, 0.56);
+        alpha = (morph.direction < 0 ? dominantAlpha : mix(capturedAlpha, dominantAlpha, smooth(0, 0.16, amount))) * paperVisibility;
+        const expandedSize = Math.max(morph.captured[particle + 2], 1.25) * 1.08;
+        size = mix(morph.direction < 0 ? Math.max(morph.captured[particle + 2], 1.25) : morph.captured[particle + 2], expandedSize, travel);
+      }
+      this.xyz[position] = x;
+      this.xyz[position + 1] = y;
+      this.xyz[position + 2] = 0;
+      this.xyz[position + 3] = 0;
+      this.buffer[particle] = x;
+      this.buffer[particle + 1] = y;
+      this.buffer[particle + 2] = size;
+      this.buffer[particle + 3] = morph.captured[particle + 3];
+      this.buffer[particle + 4] = morph.captured[particle + 4];
+      this.buffer[particle + 5] = morph.captured[particle + 5];
+      this.buffer[particle + 6] = alpha;
+    }
+    this.first = false;
+    this._draw();
+  }
+
   _draw() {
     if (this.contextLost || this.renderer === 'static') return;
     if (this.gl) {
@@ -743,7 +951,7 @@ export class ParticleExperience {
   }
 
   _canRun() {
-    return this.wantsToRun && this.visible && !this.reduced && !this.destroyed && !this.contextLost && this.renderer !== 'static';
+    return this.wantsToRun && !this.documentMorph && this.visible && !this.reduced && !this.destroyed && !this.contextLost && this.renderer !== 'static';
   }
 
   _schedule() {
@@ -784,7 +992,8 @@ export class ParticleExperience {
       this.gl.uniform1f(this.uniforms.ratio, this.dpr);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, this.buffer, this.gl.DYNAMIC_DRAW);
-      if (this.reduced) this._snapToTargets();
+      if (this.documentMorph) this._renderDocumentMorph();
+      else if (this.reduced) this._snapToTargets();
       else this._wake();
       this._dispatchState();
     } catch (error) {

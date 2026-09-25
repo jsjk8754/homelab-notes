@@ -1,4 +1,5 @@
 import { ParticleExperience } from './particles.js';
+import { createArticleReader } from './article-reader.js';
 
 const root = document.documentElement;
 const canvas = document.querySelector('#story-particles');
@@ -11,6 +12,8 @@ const stops = [0, 1.35, 2.45, 3.25, 4.55, 5.25];
 const end = 5.82;
 let experience, enhanced = false, progress = 0, current = 0, scheduled = false;
 let resizing = 0, hashTimer = 0, pendingFocus = null, ready = false;
+let reader, suspended = false;
+const homePath = location.pathname;
 
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const smooth = (a, b, value) => { const t = clamp((value - a) / (b - a)); return t * t * (3 - 2 * t); };
@@ -30,7 +33,7 @@ const hashScene = () => panels.findIndex(panel => '#' + panel.id === location.ha
 
 function update() {
   scheduled = false;
-  if (!enhanced) return;
+  if (!enhanced || suspended) return;
   progress = clamp(scrollY / maxScroll() * end, 0, end);
   const scene = Math.min(panels.length - 1, Math.floor(progress));
   const local = progress - scene;
@@ -74,9 +77,9 @@ function update() {
   ready = true;
   clearTimeout(hashTimer);
   hashTimer = setTimeout(() => {
-    if (!enhanced) return;
+    if (!enhanced || suspended || location.pathname !== homePath) return;
     const hash = '#' + panels[current].id;
-    if (location.hash !== hash && (current > 0 || location.hash)) window.history.replaceState(null, '', hash);
+    if (location.hash !== hash && (current > 0 || location.hash)) window.history.replaceState(window.history.state, '', hash);
   }, 220);
 }
 function requestUpdate() {
@@ -85,12 +88,13 @@ function requestUpdate() {
   requestAnimationFrame(update);
 }
 function goToScene(scene, { history = true, focus = false, instant = false } = {}) {
+  if (suspended || location.pathname !== homePath) return;
   scene = clamp(scene, 0, panels.length - 1);
   if (!enhanced) {
     panels[scene].scrollIntoView({ behavior: 'auto' });
     return;
   }
-  if (history && location.hash !== '#' + panels[scene].id) window.history.pushState(null, '', '#' + panels[scene].id);
+  if (history && location.hash !== '#' + panels[scene].id) window.history.pushState({}, '', '#' + panels[scene].id);
   pendingFocus = focus ? scene : null;
   scrollTo({ top: maxScroll() * stops[scene] / end, behavior: instant || motion.matches ? 'instant' : 'smooth' });
   requestUpdate();
@@ -144,47 +148,62 @@ async function initialize() {
     experience.start();
     if (initial >= 0) goToScene(initial, { history: false, instant: true });
     update();
+    reader = createArticleReader({
+      engine: experience,
+      getHomeState: () => ({ enhanced, progress, scene: current, url: new URL(homePath + '#' + panels[current].id, location.origin).href }),
+      suspendHome(value) { suspended = value; clearTimeout(hashTimer); },
+      restoreHome(record) {
+        const scene = location.pathname === homePath ? Math.max(0, hashScene()) : record.scene;
+        const destination = scene === record.scene ? record.progress : stops[scene];
+        if (experience.metrics.renderer === 'static') { current = scene; fallback(); return; }
+        experience.resize(layout());
+        scrollTo({ top: maxScroll() * destination / end, behavior: 'instant' });
+        update();
+      },
+    });
 
     document.querySelectorAll('a[data-scene]').forEach(link => link.addEventListener('click', event => {
-      if (!enhanced || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (!enhanced || suspended || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
       goToScene(Number(link.dataset.scene), { focus: event.detail === 0 });
     }));
     addEventListener('scroll', requestUpdate, { passive: true });
-    addEventListener('hashchange', () => { const scene = hashScene(); if (scene >= 0) goToScene(scene, { history: false, instant: true }); });
-    addEventListener('popstate', () => { const scene = hashScene(); goToScene(scene >= 0 ? scene : 0, { history: false, instant: true }); });
+    addEventListener('hashchange', () => { if (reader.active || reader.loading || location.pathname !== homePath) return; const scene = hashScene(); if (scene >= 0) goToScene(scene, { history: false, instant: true }); });
+    addEventListener('popstate', () => { if (reader.active || reader.loading || location.pathname !== homePath) return; const scene = hashScene(); goToScene(scene >= 0 ? scene : 0, { history: false, instant: true }); });
     addEventListener('resize', () => {
       clearTimeout(resizing);
       resizing = setTimeout(() => {
         if (!enhanced) return;
+        if (reader.active) { experience.resize(layout()); reader.resize(); return; }
         const previous = progress;
         experience.resize(layout());
         scrollTo({ top: maxScroll() * previous / end, behavior: 'instant' });
         update();
       }, 140);
     });
-    document.fonts.ready.then(() => { if (enhanced) { experience.resize(layout()); update(); } });
+    document.fonts.ready.then(() => { if (enhanced) { experience.resize(layout()); if (reader.active) reader.resize(); else update(); } });
     document.addEventListener('themechange', event => experience.setTheme(event.detail));
     const onMotion = () => { experience.setReducedMotion(motion.matches); update(); };
     if (motion.addEventListener) motion.addEventListener('change', onMotion);
     else motion.addListener?.(onMotion);
     canvas.addEventListener('particlestatechange', () => {
       if (!experience) return;
+      if (reader.active) { reader.resize(); return; }
       if (experience.metrics.renderer === 'static') fallback();
       else if (!enhanced) enhance();
     });
     addEventListener('pointermove', event => {
-      if (event.pointerType === 'touch' || document.querySelector('dialog[open]')) return;
+      if (suspended || event.pointerType === 'touch' || document.querySelector('dialog[open]')) return;
       experience.setPointer(event.clientX, event.clientY);
     }, { passive: true });
     addEventListener('pointerout', event => { if (!event.relatedTarget) experience.clearPointer(); }, { passive: true });
     addEventListener('pointerdown', event => {
-      if (event.button !== 0 || event.target.closest('a,button,input,dialog')) return;
+      if (suspended || event.button !== 0 || event.target.closest('a,button,input,dialog')) return;
       experience.pulse(event.clientX, event.clientY, 1.1);
     }, { passive: true });
     addEventListener('pointerup', event => { if (event.pointerType === 'touch') experience.clearPointer(); }, { passive: true });
     addEventListener('keydown', event => {
-      if (!enhanced || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || document.querySelector('dialog[open]')) return;
+      if (!enhanced || suspended || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || document.querySelector('dialog[open]')) return;
       if (event.target.isContentEditable || event.target.closest('input,textarea,select,button,a')) return;
       const destination = { ArrowDown: current + 1, PageDown: current + 1, ArrowUp: current - 1, PageUp: current - 1, Home: 0, End: 5 }[event.key];
       if (destination === undefined) return;

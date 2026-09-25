@@ -22,12 +22,12 @@ locale = <span class="code-accent">'ko-KR'</span>
 
 <span class="code-muted"># Build → Verify → Deploy</span></code></pre></div>
     {{ range first 1 (where site.RegularPages "Section" "projects").ByDate.Reverse }}
-    <article class="particle-project" data-particle-project><div class="frame-label"><span>SELECTED PROJECT</span><span>{{ .Params.period }}</span></div><h3>{{ .Title }}</h3><p>{{ .Params.summary }}</p><div class="project-scene-links"><a href="{{ .RelPermalink }}">기록 읽기 {{ partial "arrow.html" . }}</a>{{ with .Params.repository }}<a href="{{ . }}">소스 {{ partial "diagonal-arrow.html" $ }}</a>{{ end }}</div></article>
+    <article class="particle-project" data-particle-project data-reader-frame><div class="frame-label"><span>SELECTED PROJECT</span><span>{{ .Params.period }}</span></div><h3>{{ .Title }}</h3><p>{{ .Params.summary }}</p><div class="project-scene-links"><a data-reader-link href="{{ .RelPermalink }}">기록 읽기 {{ partial "arrow.html" . }}</a>{{ with .Params.repository }}<a href="{{ . }}">소스 {{ partial "diagonal-arrow.html" $ }}</a>{{ end }}</div></article>
     {{ end }}
   </section>
   <section class="story-scene story-side" data-panel="3" id="notes" aria-labelledby="notes-title">
     <div class="scene-copy"><p class="scene-eyebrow">03 — FIELD NOTES</p><h2 id="notes-title">흩어진 경험을,<br>다시 꺼낼 지식으로.</h2><p class="scene-description">절차와 조건을 적고,<br>미래의 내가 다시 실행할 수 있게.</p><a class="scene-link" href="{{ "notes/" | relURL }}">노트 모아 보기 {{ partial "arrow.html" . }}</a></div>
-    <div class="particle-notes">{{ range $i,$note := first 2 (where site.RegularPages "Section" "notes").ByWeight }}<a class="particle-note" data-particle-note href="{{ $note.RelPermalink }}"><span class="frame-label">{{ printf "%02d" (add $i 1) }} / {{ $note.Params.category }}</span><h3>{{ $note.Title }}</h3><p>{{ $note.Params.summary }}</p><span class="note-open">노트 읽기 {{ partial "arrow.html" $ }}</span></a>{{ end }}</div>
+    <div class="particle-notes">{{ range $i,$note := first 2 (where site.RegularPages "Section" "notes").ByWeight }}<a class="particle-note" data-particle-note data-reader-frame data-reader-link href="{{ $note.RelPermalink }}"><span class="frame-label">{{ printf "%02d" (add $i 1) }} / {{ $note.Params.category }}</span><h3>{{ $note.Title }}</h3><p>{{ $note.Params.summary }}</p><span class="note-open">노트 읽기 {{ partial "arrow.html" $ }}</span></a>{{ end }}</div>
   </section>
   <section class="story-scene story-side" data-panel="4" id="stories" aria-labelledby="stories-title">
     <div class="scene-copy"><p class="scene-eyebrow">04 — ONE EXPERIMENT</p><h2 id="stories-title">하나의 실험,<br>두 가지 이야기.</h2><p class="scene-description">기술적인 근거는 이곳에.<br>웃으며 읽는 삽질 이야기는 벨로그에.</p><a class="scene-link" href="{{ site.Params.velogURL }}">alcedo.log {{ partial "diagonal-arrow.html" . }}</a></div>

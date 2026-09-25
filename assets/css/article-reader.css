@@ -1,0 +1,30 @@
+/* A paper made by the home canvas opens onto the real Hugo article. */
+.reader-open { overflow: hidden; }
+.reader-open .story-header,.reader-open .story-navigation,.reader-open .story-scene { opacity: var(--reader-home-opacity, 0)!important; pointer-events: none!important; transition: none; }
+.reader-open #story-particles { z-index: 22; pointer-events: none; }
+.article-reader { position: fixed; inset: 0; z-index: 20; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scroll-behavior: auto; }
+.reader-paper { position: fixed; border-radius: 12px; background: var(--bg); pointer-events: none; }
+.reader-toolbar { position: sticky; top: 0; z-index: 25; display: flex; align-items: center; justify-content: space-between; min-height: 64px; padding: 10px max(24px, calc((100vw - 1240px) / 2)); background: var(--bg); border-bottom: 1px solid var(--line); opacity: var(--reader-reveal,0); }
+.reader-close { min-height: 44px; padding: 8px 0; font: 12px/1.5 var(--sans); color: var(--muted); }
+.reader-close:hover { color: var(--fg); }
+.reader-signature { font: italic 26px/1 var(--serif); }
+.reader-content { position: relative; z-index: 23; opacity: var(--reader-reveal,0); }
+.reader-content .article { padding-top: 0; }
+.reader-content .article-heading { padding-top: clamp(36px,5vw,72px); }
+.reader-content [id] { scroll-margin-top: 88px; }
+.reader-content .toc { top: 88px; }
+[data-reader-phase="opening"] .article-reader,[data-reader-phase="closing"] .article-reader { overflow: hidden; }
+[data-reader-phase="opening"] .reader-content,[data-reader-phase="closing"] .reader-content { pointer-events: none; }
+[data-reader-link][aria-busy="true"] { cursor: progress; }
+[data-reader-link][aria-busy="true"] .note-open { color: var(--accent); }
+@media(max-width:700px) {
+ .reader-toolbar { padding-inline: 20px; }
+ .reader-content .article-heading { padding-top: 32px; }
+}
+@media(prefers-reduced-motion:reduce) { .reader-content { transform: none; } }
+@media print {
+ .reader-open { overflow: visible; }
+ .reader-open #main,.reader-open .story-header,.reader-open .skip-link,.reader-toolbar,.reader-paper { display: none!important; }
+ .article-reader { position: static; overflow: visible; }
+ .reader-content { opacity: 1!important; transform: none; }
+}
