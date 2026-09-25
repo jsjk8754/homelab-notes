@@ -1,4 +1,4 @@
-import { createSandReveal } from './sand-reveal.js';
+import { captureArticleGlyphs } from './article-glyphs.js';
 
 const clamp = value => Math.max(0, Math.min(1, value));
 const smooth = (start, end, value) => { const t = clamp((value - start) / (end - start)); return t * t * (3 - 2 * t); };
@@ -29,7 +29,7 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
   status.className = 'visually-hidden';
   status.setAttribute('role', 'status');
   document.body.append(status);
-  let overlay, reveal, content, closeButton, toolbar, record, source, pending, turn;
+  let overlay, content, closeButton, toolbar, record, source, pending, turn;
   let amount = 0, phase = 'idle', animation = 0, revision = 0, scrollTimer = 0;
   let savedInert = [];
 
@@ -43,24 +43,55 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
     const margin = innerWidth <= 700 ? 10 : 24;
     return { x: Math.max(10, r.x - margin), y: 64, width: Math.min(innerWidth - 20, r.width + margin * 2), height: Math.max(120, innerHeight - 82) };
   };
+  function glyphsFor(element) {
+    try { return captureArticleGlyphs(element, { maxPoints: Math.min(16000, engine.metrics.count) }); }
+    catch { return null; } // Real HTML still fades in if glyph sampling is unavailable.
+  }
+  function positionIncoming(element) {
+    const bounds = content.getBoundingClientRect();
+    // Match the final reading width and toolbar edge, including scrollbar gutters
+    // and the toolbar border, so the settled glyphs do not shift during adoption.
+    element.style.left = `${bounds.left}px`;
+    element.style.top = `${toolbar.getBoundingClientRect().bottom}px`;
+    element.style.width = `${bounds.width}px`;
+    element.style.right = 'auto';
+  }
+  function refreshGlyphs() {
+    if (!overlay) return;
+    if (turn) {
+      positionIncoming(turn.incoming);
+      engine.setPageGlyphs(glyphsFor(content), glyphsFor(turn.incoming));
+    }
+    else if (!standalone) engine.setDocumentGlyphs(glyphsFor(content));
+  }
+  async function waitForFonts(element) {
+    element.getBoundingClientRect(); // Lay out the new text to request its font subsets.
+    if (!document.fonts || document.fonts.status !== 'loading') return;
+    let timer;
+    try { await Promise.race([document.fonts.ready, new Promise(resolve => { timer = setTimeout(resolve, 1600); })]); }
+    finally { clearTimeout(timer); }
+  }
   function render(value) {
     if (!overlay) return;
     amount = clamp(value);
     const end = expandedRect();
     const start = standalone ? end : box(frameFor(source));
-    root.style.setProperty('--reader-home-opacity', String(1 - smooth(0, .3, amount)));
+    root.style.setProperty('--reader-home-opacity', String(1 - smooth(0, .26, amount)));
     overlay.style.setProperty('--reader-reveal', String(smooth(.14, .52, amount)));
-    if (amount === 1) reveal.clear(content);
-    else reveal.paint(content, 0, { progress: amount, rect: end });
+    // The grains first form readable glyphs; only then does the matching DOM take over.
+    content.style.opacity = String(engine.metrics.documentGlyphs ? smooth(.72, 1, amount) : smooth(.12, .52, amount));
     engine.setDocumentMorph(amount, end, start);
   }
   function animate(destination, complete) {
     cancelAnimationFrame(animation);
     const from = amount;
-    const duration = motion.matches ? 0 : (destination ? 1650 : 1250) * Math.abs(destination - from);
-    const started = performance.now();
+    const duration = motion.matches ? 0 : (destination ? 1850 : 1350) * Math.abs(destination - from);
+    let elapsedTime = 0, previousFrame = performance.now();
     const tick = now => {
-      const elapsed = motion.matches || !duration ? 1 : clamp((now - started) / duration);
+      // A delayed browser frame must not skip the visible letter-forming stage.
+      elapsedTime += Math.min(48, Math.max(0, now - previousFrame));
+      previousFrame = now;
+      const elapsed = motion.matches || engine.metrics.renderer === 'static' || !duration ? 1 : clamp(elapsedTime / duration);
       render(from + (destination - from) * elapsed);
       if (elapsed < 1) animation = requestAnimationFrame(tick);
       else { animation = 0; complete(); }
@@ -152,9 +183,10 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
     if (!turn) return;
     turn.amount = value;
     const rect = expandedRect();
-    const options = { progress: value, rect, axis: 'horizontal', direction: turn.direction };
-    reveal.paint(content, 0, { ...options, exiting: true });
-    reveal.paint(turn.incoming, 1, options);
+    const glyphs = engine.metrics.pageGlyphs;
+    const canFormText = Boolean(glyphs?.from && glyphs?.to);
+    content.style.opacity = String(1 - smooth(0, canFormText ? .18 : 1, value));
+    turn.incoming.style.opacity = String(smooth(canFormText ? .78 : 0, 1, value));
     engine.setPageTurn(value, rect);
   }
   function finishTurn({ focus = true } = {}) {
@@ -210,16 +242,27 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
       incoming.append(document.importNode(data.article, true));
       overlay.append(incoming);
       enhanceContent(incoming);
+      positionIncoming(incoming);
       incoming.scrollTop = restoreScroll;
       closeButton.focus({ preventScroll: true });
       content.inert = true;
       setPhase('turning');
       engine.beginPageTurn(expandedRect(), direction);
-      turn = { incoming, direction, scroll: restoreScroll, amount: 0 };
+      const nextTurn = { incoming, direction, scroll: restoreScroll, amount: 0 };
+      turn = nextTurn;
       renderTurn(0);
-      const started = performance.now();
+      // The fetched article is now mounted; Escape must settle/close the turn,
+      // rather than merely cancel an already completed network request.
+      pending = null;
+      link?.removeAttribute('aria-busy');
+      await waitForFonts(incoming);
+      if (token !== revision || turn !== nextTurn || !active()) return;
+      refreshGlyphs();
+      let elapsedTime = 0, previousFrame = performance.now();
       const tick = now => {
-        const value = motion.matches ? 1 : clamp((now - started) / 1450);
+        elapsedTime += Math.min(48, Math.max(0, now - previousFrame));
+        previousFrame = now;
+        const value = motion.matches || engine.metrics.renderer === 'static' ? 1 : clamp(elapsedTime / 1800);
         renderTurn(value);
         if (value < 1) animation = requestAnimationFrame(tick);
         else finishTurn();
@@ -242,7 +285,6 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
     overlay = document.createElement('main');
     overlay.className = 'article-reader';
     overlay.setAttribute('aria-label', '기술 기록 읽기');
-    reveal = createSandReveal(overlay);
     toolbar = document.createElement('div');
     toolbar.className = 'reader-toolbar';
     closeButton = document.createElement('button');
@@ -298,12 +340,17 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
       return;
     }
     render(0);
-    animate(1, () => {
-      setPhase('reading');
-      if (restoreScroll) overlay.scrollTop = restoreScroll;
-      else jumpToHash();
-      focusTitle();
-      status.textContent = '';
+    const mountedOverlay = overlay, mountedContent = content;
+    waitForFonts(content).then(() => {
+      if (overlay !== mountedOverlay || content !== mountedContent || phase !== 'opening') return;
+      refreshGlyphs();
+      animate(1, () => {
+        setPhase('reading');
+        if (restoreScroll) overlay.scrollTop = restoreScroll;
+        else jumpToHash();
+        focusTitle();
+        status.textContent = '';
+      });
     });
   }
   async function open(link, saved = null, restoreScroll = 0) {
@@ -345,6 +392,7 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
     closeButton.disabled = true;
     // Clear the first view back into the home grains, even from a long article.
     overlay.scrollTop = 0;
+    refreshGlyphs();
     animate(0, () => {
       overlay.remove();
       overlay = null;
@@ -418,6 +466,8 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
     else if (active()) { event.preventDefault(); requestClose(); }
   });
   addEventListener('pagehide', () => { cancelPending(); saveScroll(); });
+  document.addEventListener('themechange', () => { if (animation || turn) refreshGlyphs(); });
+  document.fonts?.addEventListener('loadingdone', () => { if (animation) refreshGlyphs(); });
   if (standalone) {
     const data = { article: initialArticle, title: document.title, metadata: Object.fromEntries(originalMeta.map(({ selector, value }) => [selector, value])) };
     cache.set(location.origin + location.pathname, data);
@@ -431,6 +481,12 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
   return {
     get active() { return active(); },
     get loading() { return Boolean(pending); },
-    resize() { if (turn) renderTurn(turn.amount); else if (active()) render(amount); },
+    resize() {
+      // Renderer state notifications also use this path. Sampling is only needed
+      // while particles are visible, not when settling back into static reading.
+      if (turn || animation) refreshGlyphs();
+      if (turn) renderTurn(turn.amount);
+      else if (active()) render(amount);
+    },
   };
 }

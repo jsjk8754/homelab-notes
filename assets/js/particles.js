@@ -1,5 +1,3 @@
-import { sandFront } from './sand-flow.js';
-
 const TAU = Math.PI * 2;
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const mix = (from, to, amount) => from + (to - from) * amount;
@@ -32,6 +30,21 @@ function updateRect(target, rect, canvasRect) {
   target.width = rect.width;
   target.height = rect.height;
   return true;
+}
+
+function spreadMortonBits(value) {
+  let bits = value & 1023;
+  bits = (bits | (bits << 16)) & 0x030000ff;
+  bits = (bits | (bits << 8)) & 0x0300f00f;
+  bits = (bits | (bits << 4)) & 0x030c30c3;
+  bits = (bits | (bits << 2)) & 0x09249249;
+  return bits;
+}
+
+function mortonCode(x, y, minX, minY, spanX, spanY) {
+  const nx = Math.round(clamp((x - minX) / spanX) * 1023);
+  const ny = Math.round(clamp((y - minY) / spanY) * 1023);
+  return spreadMortonBits(nx) | (spreadMortonBits(ny) << 1);
 }
 
 /**
@@ -110,6 +123,11 @@ export class ParticleExperience {
       poolVersion: this.poolVersion,
       documentMorph: this.documentMorph ? this.documentMorph.amount : null,
       pageTurn: this.pageTurn ? this.pageTurn.amount : null,
+      documentGlyphs: this.documentMorph?.glyphCount || 0,
+      pageGlyphs: this.pageTurn ? {
+        from: this.pageTurn.fromGlyphCount || 0,
+        to: this.pageTurn.toGlyphCount || 0,
+      } : null,
     };
   }
 
@@ -173,6 +191,8 @@ export class ParticleExperience {
       this._snapToTargets();
       this._captureDocumentMorph();
     } else if (this.pageTurn) this._snapToTargets();
+    if (this.documentMorph) this._refreshDocumentGlyphTargets();
+    if (this.pageTurn) this._refreshPageGlyphTargets();
     if (this.pageTurn) this._renderPageTurn();
     else if (this.documentMorph) this._renderDocumentMorph();
     else if (this.reduced) this._snapToTargets();
@@ -272,10 +292,7 @@ export class ParticleExperience {
     return this;
   }
 
-  /**
-   * Freeze the current home-stage grains before they join the sand stream.
-   * Rects use viewport coordinates, matching DOMRect.
-   */
+  /** Freeze the current home-stage particles before they form readable glyphs. */
   beginDocumentMorph(sourceRect) {
     if (this.destroyed) return this;
     const rect = copyRect(sourceRect, this.canvas.getBoundingClientRect());
@@ -289,6 +306,10 @@ export class ParticleExperience {
       sourceRect: rect,
       expandedRect: { ...rect },
       captured: null,
+      glyphs: null,
+      glyphTargets: null,
+      glyphCurve: null,
+      glyphCount: 0,
     };
     this._captureDocumentMorph();
     this._renderDocumentMorph();
@@ -296,10 +317,16 @@ export class ParticleExperience {
     return this;
   }
 
-  /**
-   * Render one synchronous frame of the home-to-reader sand transition. At one
-   * every grain has faded so the reading surface remains quiet.
-   */
+  /** Set the sampled glyph target for the current document transition. */
+  setDocumentGlyphs(glyphs) {
+    if (!this.documentMorph || this.destroyed) return this;
+    this.documentMorph.glyphs = glyphs || null;
+    this._refreshDocumentGlyphTargets();
+    this._renderDocumentMorph();
+    return this;
+  }
+
+  /** Render one synchronous frame of the home-to-reader glyph transition. */
   setDocumentMorph(amount, expandedRect, sourceRect) {
     const morph = this.documentMorph;
     if (!morph || this.destroyed) return this;
@@ -312,7 +339,7 @@ export class ParticleExperience {
     return this;
   }
 
-  /** Restore the scroll scene and its original run state after the reverse flow. */
+  /** Restore the scroll scene and its original run state after the reverse morph. */
   endDocumentMorph() {
     if (!this.documentMorph) return this;
     this.pageTurn = null;
@@ -324,8 +351,8 @@ export class ParticleExperience {
     return this;
   }
 
-  /** Begin a controller-driven sand front over the current reader. */
-  beginPageTurn(rect, direction = 1) {
+  /** Begin a controller-driven glyph-to-glyph transition over the reader. */
+  beginPageTurn(rect, direction = 1, fromGlyphs = null, toGlyphs = null) {
     if (this.destroyed) return this;
     const localRect = copyRect(rect, this.canvas.getBoundingClientRect());
     if (!localRect) return this;
@@ -336,7 +363,15 @@ export class ParticleExperience {
       amount: 0,
       direction: Number(direction) < 0 ? -1 : 1,
       rect: localRect,
+      fromGlyphs,
+      toGlyphs,
+      fromTargets: null,
+      toTargets: null,
+      curve: null,
+      fromGlyphCount: 0,
+      toGlyphCount: 0,
     };
+    this._refreshPageGlyphTargets();
     this._renderPageTurn();
     this._dispatchState();
     return this;
@@ -347,6 +382,16 @@ export class ParticleExperience {
     if (!this.pageTurn || this.destroyed) return this;
     updateRect(this.pageTurn.rect, rect, this.canvas.getBoundingClientRect());
     this.pageTurn.amount = clamp(Number(amount) || 0);
+    this._renderPageTurn();
+    return this;
+  }
+
+  /** Replace page glyph samples after layout, viewport, or theme changes. */
+  setPageGlyphs(fromGlyphs, toGlyphs) {
+    if (!this.pageTurn || this.destroyed) return this;
+    this.pageTurn.fromGlyphs = fromGlyphs || null;
+    this.pageTurn.toGlyphs = toGlyphs || null;
+    this._refreshPageGlyphTargets();
     this._renderPageTurn();
     return this;
   }
@@ -830,6 +875,144 @@ export class ParticleExperience {
     this.buffer[offset + 6] = target[3];
   }
 
+  _prepareGlyphTargets(glyphs, sourcePositions = null) {
+    const points = glyphs?.points;
+    const requestedCount = Math.floor(Number(glyphs?.count) || 0);
+    const availableCount = points?.length ? Math.floor(points.length / 6) : 0;
+    const limit = Math.min(requestedCount, availableCount);
+    if (!points || limit <= 0 || !this.count) return { targets: null, count: 0 };
+
+    const targetOrder = [];
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (let i = 0; i < limit; i += 1) {
+      const offset = i * 6;
+      const x = points[offset];
+      const y = points[offset + 1];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      targetOrder.push(i);
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+    const glyphCount = targetOrder.length;
+    if (!glyphCount) return { targets: null, count: 0 };
+    const targetSpanX = Math.max(1, maxX - minX);
+    const targetSpanY = Math.max(1, maxY - minY);
+    targetOrder.sort((left, right) => {
+      const l = left * 6;
+      const r = right * 6;
+      return mortonCode(points[l], points[l + 1], minX, minY, targetSpanX, targetSpanY)
+        - mortonCode(points[r], points[r + 1], minX, minY, targetSpanX, targetSpanY);
+    });
+
+    const poolOrder = Array.from({ length: this.count }, (_, index) => index);
+    if (sourcePositions?.length >= this.count * 7) {
+      let sourceMinX = Infinity;
+      let sourceMinY = Infinity;
+      let sourceMaxX = -Infinity;
+      let sourceMaxY = -Infinity;
+      for (let i = 0; i < this.count; i += 1) {
+        const offset = i * 7;
+        const x = sourcePositions[offset];
+        const y = sourcePositions[offset + 1];
+        sourceMinX = Math.min(sourceMinX, x);
+        sourceMinY = Math.min(sourceMinY, y);
+        sourceMaxX = Math.max(sourceMaxX, x);
+        sourceMaxY = Math.max(sourceMaxY, y);
+      }
+      const sourceSpanX = Math.max(1, sourceMaxX - sourceMinX);
+      const sourceSpanY = Math.max(1, sourceMaxY - sourceMinY);
+      poolOrder.sort((left, right) => {
+        const l = left * 7;
+        const r = right * 7;
+        return mortonCode(sourcePositions[l], sourcePositions[l + 1], sourceMinX, sourceMinY, sourceSpanX, sourceSpanY)
+          - mortonCode(sourcePositions[r], sourcePositions[r + 1], sourceMinX, sourceMinY, sourceSpanX, sourceSpanY);
+      });
+    }
+
+    const canvasRect = this.canvas.getBoundingClientRect();
+    const targets = new Float32Array(this.count * 6);
+    for (let rank = 0; rank < this.count; rank += 1) {
+      const particle = poolOrder[rank] * 6;
+      const glyphRank = Math.min(glyphCount - 1, Math.floor((rank * glyphCount) / this.count));
+      const sample = targetOrder[glyphRank] * 6;
+      const r = points[sample + 2];
+      const g = points[sample + 3];
+      const b = points[sample + 4];
+      const alpha = points[sample + 5];
+      targets[particle] = points[sample] - canvasRect.left;
+      targets[particle + 1] = points[sample + 1] - canvasRect.top;
+      targets[particle + 2] = clamp(Number.isFinite(r) ? r : 0.5);
+      targets[particle + 3] = clamp(Number.isFinite(g) ? g : 0.5);
+      targets[particle + 4] = clamp(Number.isFinite(b) ? b : 0.5);
+      targets[particle + 5] = clamp(Number.isFinite(alpha) ? alpha : 0);
+    }
+    return { targets, count: glyphCount };
+  }
+
+  _refreshDocumentGlyphTargets() {
+    const morph = this.documentMorph;
+    if (!morph) return;
+    const prepared = this._prepareGlyphTargets(morph.glyphs, morph.captured);
+    morph.glyphTargets = prepared.targets;
+    morph.glyphCount = prepared.count;
+    morph.glyphCurve = null;
+    if (!prepared.targets || !morph.captured) return;
+    const width = Math.max(1, this.width);
+    const height = Math.max(1, this.height);
+    const curve = new Float32Array(this.count * 2);
+    for (let i = 0; i < this.count; i += 1) {
+      const particle = i * 7;
+      const glyph = i * 6;
+      const coefficient = i * 2;
+      const targetX = prepared.targets[glyph];
+      const targetY = prepared.targets[glyph + 1];
+      const dx = targetX - morph.captured[particle];
+      const dy = targetY - morph.captured[particle + 1];
+      const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+      const field = Math.sin((targetX / width * 1.45 + targetY / height * 1.15) * TAU) * 6.5;
+      curve[coefficient] = -(dy / distance) * field;
+      curve[coefficient + 1] = (dx / distance) * field;
+    }
+    morph.glyphCurve = curve;
+  }
+
+  _refreshPageGlyphTargets() {
+    const page = this.pageTurn;
+    if (!page) return;
+    const from = this._prepareGlyphTargets(page.fromGlyphs);
+    const to = this._prepareGlyphTargets(page.toGlyphs);
+    page.fromTargets = from.targets;
+    page.toTargets = to.targets;
+    page.fromGlyphCount = from.count;
+    page.toGlyphCount = to.count;
+    page.curve = null;
+    if (!from.targets || !to.targets) return;
+    const width = Math.max(1, this.width);
+    const height = Math.max(1, this.height);
+    const curve = new Float32Array(this.count * 2);
+    for (let i = 0; i < this.count; i += 1) {
+      const glyph = i * 6;
+      const coefficient = i * 2;
+      const fromX = from.targets[glyph];
+      const fromY = from.targets[glyph + 1];
+      const toX = to.targets[glyph];
+      const toY = to.targets[glyph + 1];
+      const dx = toX - fromX;
+      const dy = toY - fromY;
+      const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+      const field = Math.sin(((fromX + toX) / width * 0.72 + (fromY + toY) / height * 0.58) * TAU);
+      const strength = page.direction * (7.5 + field * 3.2);
+      curve[coefficient] = -(dy / distance) * strength;
+      curve[coefficient + 1] = (dx / distance) * strength;
+    }
+    page.curve = curve;
+  }
+
   _captureDocumentMorph() {
     const morph = this.documentMorph;
     if (!morph || !this.buffer) return;
@@ -844,53 +1027,44 @@ export class ParticleExperience {
     const morph = this.documentMorph;
     if (!morph?.captured || !this.xyz || !this.buffer) return;
     const amount = morph.amount;
-    const expanded = morph.expandedRect || morph.sourceRect;
-    const endVisibility = 1 - smooth(0.84, 1, amount);
-    const ink = this.theme === 'ink';
-    const baseR = ink ? 0.86 : 0.18;
-    const baseG = ink ? 0.82 : 0.17;
-    const baseB = ink ? 0.70 : 0.14;
-    const warmR = ink ? 0.91 : 0.55;
-    const warmG = ink ? 0.61 : 0.32;
-    const warmB = ink ? 0.40 : 0.18;
+    const targets = morph.glyphTargets;
+    const curveTargets = morph.glyphCurve;
+    const hasGlyphs = Boolean(targets?.length && curveTargets?.length);
+    const fallbackVisibility = 1 - smooth(0, 0.26, amount);
+    const glyphVisibility = 1 - smooth(0.72, 1, amount);
+    const alphaMix = smooth(0, 0.26, amount);
+    const colorMix = smooth(0.18, 0.68, amount);
+    const phaseEnvelope = 0.034 * Math.sin(amount * Math.PI);
     for (let i = 0; i < this.count; i += 1) {
       const particle = i * 7;
       const position = i * 4;
-      const a = this.seed[position];
-      const b = this.seed[position + 1];
-      const c = this.seed[position + 2];
-      const d = this.seed[position + 3];
-      const cross = b;
-      const driftEnvelope = Math.sin(amount * Math.PI);
-      const lateralDrift = driftEnvelope * (
-        0.017 * Math.sin(cross * TAU * 1.7 + amount * 4.1)
-        + 0.006 * Math.sin(cross * TAU * 3.6 - amount * 2.7)
-      );
-      const displacedCross = cross + lateralDrift;
-      const front = sandFront(displacedCross, amount);
-      const dune = (c + d - 1) * 0.12;
-      const inWake = a < 0.16;
-      const trailing = inWake ? 0.025 + c * 0.20 : 0;
-      const axis = front + dune - trailing;
-      const eddy = Math.sin((displacedCross * 4.8 + amount * 0.72) * TAU) * driftEnvelope;
-      const streamX = expanded.x + (displacedCross + eddy * (inWake ? 0.006 : 0.0025)) * expanded.width;
-      const streamY = expanded.y + axis * expanded.height + Math.sin((displacedCross * 3.2 + amount * 0.65) * TAU) * driftEnvelope * (inWake ? 3.8 : 1.5);
-      const phase = (a - 0.5) * 0.055 * Math.sin(amount * Math.PI);
-      const migration = smooth(0, 0.21, clamp(amount + phase));
       const originX = morph.captured[particle];
       const originY = morph.captured[particle + 1];
-      const dx = streamX - originX;
-      const dy = streamY - originY;
-      const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-      const curve = Math.sin(migration * Math.PI) * (eddy * 5.2 + Math.sin(displacedCross * TAU) * 2.2);
-      const x = mix(originX, streamX, migration) - (dy / distance) * curve;
-      const y = mix(originY, streamY, migration) + (dx / distance) * curve;
-      const capturedAlpha = morph.captured[particle + 6];
-      const grainAlpha = inWake ? 0.025 + d * 0.050 : 0.23 + d * 0.39;
-      const alpha = mix(capturedAlpha, grainAlpha, migration) * endVisibility;
-      const grainSize = inWake ? 0.42 + d * 0.40 : 0.85 + d * 0.80;
-      const size = mix(morph.captured[particle + 2], grainSize, migration);
-      const warmth = inWake ? 0.08 + d * 0.10 : 0.14 + c * 0.18;
+      let x = originX;
+      let y = originY;
+      let size = morph.captured[particle + 2];
+      let r = morph.captured[particle + 3];
+      let g = morph.captured[particle + 4];
+      let b = morph.captured[particle + 5];
+      let alpha = morph.captured[particle + 6] * fallbackVisibility;
+      if (hasGlyphs) {
+        const glyph = i * 6;
+        const coefficient = i * 2;
+        const targetX = targets[glyph];
+        const targetY = targets[glyph + 1];
+        const phase = (this.seed[position] - 0.5) * phaseEnvelope;
+        const travel = smooth(0, 0.68, clamp(amount + phase));
+        const curveEnvelope = Math.sin(travel * Math.PI);
+        x = mix(originX, targetX, travel) + curveTargets[coefficient] * curveEnvelope;
+        y = mix(originY, targetY, travel) + curveTargets[coefficient + 1] * curveEnvelope;
+        const coverage = targets[glyph + 5];
+        const glyphSize = 0.72 + coverage * 0.56 + this.seed[position + 3] * 0.14;
+        size = mix(morph.captured[particle + 2], glyphSize, travel);
+        r = mix(morph.captured[particle + 3], targets[glyph + 2], colorMix);
+        g = mix(morph.captured[particle + 4], targets[glyph + 3], colorMix);
+        b = mix(morph.captured[particle + 5], targets[glyph + 4], colorMix);
+        alpha = mix(morph.captured[particle + 6], coverage, alphaMix) * glyphVisibility;
+      }
       this.xyz[position] = x;
       this.xyz[position + 1] = y;
       this.xyz[position + 2] = 0;
@@ -898,9 +1072,9 @@ export class ParticleExperience {
       this.buffer[particle] = x;
       this.buffer[particle + 1] = y;
       this.buffer[particle + 2] = size;
-      this.buffer[particle + 3] = mix(morph.captured[particle + 3], mix(baseR, warmR, warmth), migration);
-      this.buffer[particle + 4] = mix(morph.captured[particle + 4], mix(baseG, warmG, warmth), migration);
-      this.buffer[particle + 5] = mix(morph.captured[particle + 5], mix(baseB, warmB, warmth), migration);
+      this.buffer[particle + 3] = r;
+      this.buffer[particle + 4] = g;
+      this.buffer[particle + 5] = b;
       this.buffer[particle + 6] = alpha;
     }
     this.first = false;
@@ -911,42 +1085,44 @@ export class ParticleExperience {
     const page = this.pageTurn;
     if (!page || !this.xyz || !this.buffer) return;
     const amount = page.amount;
-    const visibility = smooth(0, 0.10, amount) * (1 - smooth(0.90, 1, amount));
-    const rect = page.rect;
-    const direction = page.direction;
-    const ink = this.theme === 'ink';
-    const baseR = ink ? 0.86 : 0.18;
-    const baseG = ink ? 0.82 : 0.17;
-    const baseB = ink ? 0.70 : 0.14;
-    const warmR = ink ? 0.91 : 0.55;
-    const warmG = ink ? 0.61 : 0.32;
-    const warmB = ink ? 0.40 : 0.18;
+    const from = page.fromTargets;
+    const to = page.toTargets;
+    const curveTargets = page.curve;
+    const hasGlyphs = Boolean(from?.length && to?.length && curveTargets?.length);
+    const appear = smooth(0, 0.18, amount);
+    const fade = 1 - smooth(0.78, 1, amount);
+    const phaseEnvelope = 0.038 * Math.sin(smooth(0.16, 0.74, amount) * Math.PI);
     for (let i = 0; i < this.count; i += 1) {
       const position = i * 4;
       const particle = i * 7;
-      const a = this.seed[position];
-      const b = this.seed[position + 1];
-      const c = this.seed[position + 2];
-      const d = this.seed[position + 3];
-      const cross = c;
-      const driftEnvelope = Math.sin(amount * Math.PI);
-      const lateralDrift = driftEnvelope * (
-        0.018 * Math.sin(cross * TAU * 1.6 + amount * 4.0)
-        + 0.006 * Math.sin(cross * TAU * 3.8 - amount * 2.5)
-      );
-      const displacedCross = cross + lateralDrift;
-      const front = sandFront(displacedCross, amount);
-      const dune = (a + d - 1) * 0.12;
-      const inWake = b < 0.18;
-      const trailing = inWake ? 0.025 + a * 0.22 : 0;
-      const flowEddy = Math.sin((displacedCross * 4.9 + amount * 0.76) * TAU) * driftEnvelope;
-      const axis = front + dune - trailing + flowEddy * (inWake ? 0.010 : 0.0035);
-      const xNorm = direction > 0 ? 1 - axis : axis;
-      const x = rect.x + xNorm * rect.width;
-      const y = rect.y + (displacedCross + Math.sin((displacedCross * 3.3 + amount * 0.68) * TAU) * driftEnvelope * (inWake ? 0.006 : 0.0025)) * rect.height;
-      const warmth = inWake ? 0.08 + d * 0.10 : 0.14 + a * 0.18;
-      const alpha = visibility * (inWake ? 0.025 + d * 0.050 : 0.23 + d * 0.39);
-      const size = inWake ? 0.42 + d * 0.40 : 0.85 + d * 0.80;
+      let x = this.xyz[position];
+      let y = this.xyz[position + 1];
+      let size = 0;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let alpha = 0;
+      if (hasGlyphs) {
+        const glyph = i * 6;
+        const coefficient = i * 2;
+        const fromX = from[glyph];
+        const fromY = from[glyph + 1];
+        const toX = to[glyph];
+        const toY = to[glyph + 1];
+        const phase = (this.seed[position] - 0.5) * phaseEnvelope;
+        const travel = smooth(0.16, 0.74, clamp(amount + phase));
+        const curveEnvelope = Math.sin(travel * Math.PI);
+        x = mix(fromX, toX, travel) + curveTargets[coefficient] * curveEnvelope;
+        y = mix(fromY, toY, travel) + curveTargets[coefficient + 1] * curveEnvelope;
+        const fromCoverage = from[glyph + 5];
+        const toCoverage = to[glyph + 5];
+        const coverage = mix(fromCoverage, toCoverage, travel);
+        size = 0.72 + coverage * 0.56 + this.seed[position + 3] * 0.14;
+        r = mix(from[glyph + 2], to[glyph + 2], travel);
+        g = mix(from[glyph + 3], to[glyph + 3], travel);
+        b = mix(from[glyph + 4], to[glyph + 4], travel);
+        alpha = coverage * appear * fade;
+      }
       this.xyz[position] = x;
       this.xyz[position + 1] = y;
       this.xyz[position + 2] = 0;
@@ -954,9 +1130,9 @@ export class ParticleExperience {
       this.buffer[particle] = x;
       this.buffer[particle + 1] = y;
       this.buffer[particle + 2] = size;
-      this.buffer[particle + 3] = mix(baseR, warmR, warmth);
-      this.buffer[particle + 4] = mix(baseG, warmG, warmth);
-      this.buffer[particle + 5] = mix(baseB, warmB, warmth);
+      this.buffer[particle + 3] = r;
+      this.buffer[particle + 4] = g;
+      this.buffer[particle + 5] = b;
       this.buffer[particle + 6] = alpha;
     }
     this.first = false;
