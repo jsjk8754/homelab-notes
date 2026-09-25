@@ -87,11 +87,13 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
     const from = amount;
     const duration = motion.matches ? 0 : (destination ? 1850 : 1350) * Math.abs(destination - from);
     let elapsedTime = 0, previousFrame = performance.now();
+    const deadline = previousFrame + duration + 2000;
     const tick = now => {
       // A delayed browser frame must not skip the visible letter-forming stage.
       elapsedTime += Math.min(48, Math.max(0, now - previousFrame));
       previousFrame = now;
-      const elapsed = motion.matches || engine.metrics.renderer === 'static' || !duration ? 1 : clamp(elapsedTime / duration);
+      // Sustained background throttling must not leave the article unreadable.
+      const elapsed = motion.matches || engine.metrics.renderer === 'static' || !duration || now >= deadline ? 1 : clamp(elapsedTime / duration);
       render(from + (destination - from) * elapsed);
       if (elapsed < 1) animation = requestAnimationFrame(tick);
       else { animation = 0; complete(); }
@@ -259,10 +261,11 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
       if (token !== revision || turn !== nextTurn || !active()) return;
       refreshGlyphs();
       let elapsedTime = 0, previousFrame = performance.now();
+      const deadline = previousFrame + 3800;
       const tick = now => {
         elapsedTime += Math.min(48, Math.max(0, now - previousFrame));
         previousFrame = now;
-        const value = motion.matches || engine.metrics.renderer === 'static' ? 1 : clamp(elapsedTime / 1800);
+        const value = motion.matches || engine.metrics.renderer === 'static' || now >= deadline ? 1 : clamp(elapsedTime / 1800);
         renderTurn(value);
         if (value < 1) animation = requestAnimationFrame(tick);
         else finishTurn();
