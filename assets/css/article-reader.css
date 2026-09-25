@@ -1,14 +1,14 @@
-/* A paper made by the home canvas opens onto the real Hugo article. */
+/* A flowing sand front reveals the real Hugo article, then gets out of its way. */
 .reader-open { overflow: hidden; }
-.reader-open .story-header,.reader-open .story-navigation,.reader-open .story-scene { opacity: var(--reader-home-opacity, 0)!important; pointer-events: none!important; transition: none; }
+.reader-open .story-header,.reader-open .story-navigation,.reader-open .story-scene { opacity: var(--reader-home-opacity, 0)!important; pointer-events: none!important; transition: none!important; }
 .reader-open #story-particles { z-index: 22; pointer-events: none; }
 .article-reader { position: fixed; inset: 0; z-index: 20; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scroll-behavior: auto; }
-.reader-paper { position: fixed; border-radius: 12px; background: var(--bg); pointer-events: none; }
+.reader-sand-defs { position: fixed; top: 0; left: 0; pointer-events: none; }
 .reader-toolbar { position: sticky; top: 0; z-index: 25; display: flex; align-items: center; justify-content: space-between; min-height: 64px; padding: 10px max(24px, calc((100vw - 1240px) / 2)); background: var(--bg); border-bottom: 1px solid var(--line); opacity: var(--reader-reveal,0); }
 .reader-close { min-height: 44px; padding: 8px 0; font: 12px/1.5 var(--sans); color: var(--muted); }
 .reader-close:hover { color: var(--fg); }
 .reader-signature { font: italic 26px/1 var(--serif); }
-.reader-content { position: relative; z-index: 23; opacity: var(--reader-reveal,0); }
+.reader-content { position: relative; z-index: 23; }
 .reader-pages { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .reader-pages a,.reader-pages>span { display: inline-flex; min-height: 44px; align-items: center; padding: 8px 10px; font: 12px/1.5 var(--sans); color: var(--muted); }
 .reader-pages a:hover { color: var(--fg); }
@@ -25,7 +25,7 @@
 .reader-standalone #main,.reader-standalone .site-header,.reader-standalone .site-footer { display: none; }
 #reader-particles { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 22; pointer-events: none; visibility: hidden; }
 [data-reader-phase="turning"] #reader-particles { visibility: visible; }
-.reader-content.reader-page-incoming { position: fixed; inset: 64px 0 0; overflow: hidden; opacity: 0; }
+.reader-content.reader-page-incoming { position: fixed; inset: 64px 0 0; overflow: hidden; }
 [data-reader-phase="turning"] .article-reader { overflow: hidden; }
 [data-reader-phase="turning"] .reader-content { pointer-events: none; }
 [data-reader-phase="turning"] .reader-pages { pointer-events: none; opacity: .4; }
@@ -50,7 +50,7 @@
 @media(prefers-reduced-motion:reduce) { .reader-content { transform: none; } }
 @media print {
  .reader-open { overflow: visible; }
- .reader-open #main,.reader-open .story-header,.reader-open .skip-link,.reader-toolbar,.reader-paper,#reader-particles,.article-pagination { display: none!important; }
+ .reader-open #main,.reader-open .story-header,.reader-open .skip-link,.reader-toolbar,.reader-sand-defs,#reader-particles,.article-pagination { display: none!important; }
  .article-reader { position: static; overflow: visible; }
- .reader-content { opacity: 1!important; transform: none; }
+ .reader-content { opacity: 1!important; transform: none; mask: none!important; }
 }

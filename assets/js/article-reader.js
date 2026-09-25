@@ -1,3 +1,5 @@
+import { createSandReveal } from './sand-reveal.js';
+
 const clamp = value => Math.max(0, Math.min(1, value));
 const smooth = (start, end, value) => { const t = clamp((value - start) / (end - start)); return t * t * (3 - 2 * t); };
 const box = element => {
@@ -5,7 +7,7 @@ const box = element => {
   return { x: r.x, y: r.y, width: r.width, height: r.height };
 };
 
-/** The same reader serves the home papers and directly opened Hugo notes. */
+/** The same reader serves home links and directly opened Hugo notes. */
 export function createArticleReader({ engine, getHomeState, suspendHome = () => {}, restoreHome = () => {}, initialArticle = null }) {
   const standalone = Boolean(initialArticle);
   const root = document.documentElement;
@@ -27,7 +29,7 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
   status.className = 'visually-hidden';
   status.setAttribute('role', 'status');
   document.body.append(status);
-  let overlay, paper, content, closeButton, toolbar, record, source, pending, turn;
+  let overlay, reveal, content, closeButton, toolbar, record, source, pending, turn;
   let amount = 0, phase = 'idle', animation = 0, revision = 0, scrollTimer = 0;
   let savedInert = [];
 
@@ -46,24 +48,16 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
     amount = clamp(value);
     const end = expandedRect();
     const start = standalone ? end : box(frameFor(source));
-    const travel = smooth(0, 1, amount);
-    const mix = (a, b) => a + (b - a) * travel;
-    const bounds = { left: mix(start.x, end.x), top: mix(start.y, end.y), width: mix(start.width, end.width), height: mix(start.height, end.height) };
-    for (const [property, value] of Object.entries(bounds)) paper.style[property] = value + 'px';
-    root.style.setProperty('--reader-home-opacity', String(1 - smooth(0, .42, amount)));
-    overlay.style.setProperty('--reader-reveal', String(smooth(.56, .96, amount)));
-    // The article appears inside the expanding paper, not outside its edges.
-    const top = bounds.top - content.getBoundingClientRect().top;
-    const right = bounds.left + bounds.width;
-    const bottom = top + bounds.height;
-    content.style.clipPath = amount === 1 ? 'none' : `polygon(${bounds.left}px ${top}px, ${right}px ${top}px, ${right}px ${bottom}px, ${bounds.left}px ${bottom}px)`;
-    paper.style.opacity = String(Math.sin(amount * Math.PI) * .7);
+    root.style.setProperty('--reader-home-opacity', String(1 - smooth(0, .3, amount)));
+    overlay.style.setProperty('--reader-reveal', String(smooth(.14, .52, amount)));
+    if (amount === 1) reveal.clear(content);
+    else reveal.paint(content, 0, { progress: amount, rect: end });
     engine.setDocumentMorph(amount, end, start);
   }
   function animate(destination, complete) {
     cancelAnimationFrame(animation);
     const from = amount;
-    const duration = motion.matches ? 0 : (destination ? 1100 : 920) * Math.abs(destination - from);
+    const duration = motion.matches ? 0 : (destination ? 1650 : 1250) * Math.abs(destination - from);
     const started = performance.now();
     const tick = now => {
       const elapsed = motion.matches || !duration ? 1 : clamp((now - started) / duration);
@@ -157,13 +151,11 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
   function renderTurn(value) {
     if (!turn) return;
     turn.amount = value;
-    const progress = smooth(0, 1, value);
-    const remaining = (1 - progress) * 100;
-    content.style.clipPath = turn.direction > 0 ? `inset(0 ${progress * 100}% 0 0)` : `inset(0 0 0 ${progress * 100}%)`;
-    content.style.opacity = String(1 - smooth(.1, .58, value));
-    turn.incoming.style.clipPath = turn.direction > 0 ? `inset(0 0 0 ${remaining}%)` : `inset(0 ${remaining}% 0 0)`;
-    turn.incoming.style.opacity = String(smooth(.34, .9, value));
-    engine.setPageTurn(value, expandedRect());
+    const rect = expandedRect();
+    const options = { progress: value, rect, axis: 'horizontal', direction: turn.direction };
+    reveal.paint(content, 0, { ...options, exiting: true });
+    reveal.paint(turn.incoming, 1, options);
+    engine.setPageTurn(value, rect);
   }
   function finishTurn({ focus = true } = {}) {
     if (!turn) return;
@@ -218,6 +210,7 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
       incoming.append(document.importNode(data.article, true));
       overlay.append(incoming);
       enhanceContent(incoming);
+      incoming.scrollTop = restoreScroll;
       closeButton.focus({ preventScroll: true });
       content.inert = true;
       setPhase('turning');
@@ -226,7 +219,7 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
       renderTurn(0);
       const started = performance.now();
       const tick = now => {
-        const value = motion.matches ? 1 : clamp((now - started) / 1120);
+        const value = motion.matches ? 1 : clamp((now - started) / 1450);
         renderTurn(value);
         if (value < 1) animation = requestAnimationFrame(tick);
         else finishTurn();
@@ -249,9 +242,7 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
     overlay = document.createElement('main');
     overlay.className = 'article-reader';
     overlay.setAttribute('aria-label', '기술 기록 읽기');
-    paper = document.createElement('div');
-    paper.className = 'reader-paper';
-    paper.setAttribute('aria-hidden', 'true');
+    reveal = createSandReveal(overlay);
     toolbar = document.createElement('div');
     toolbar.className = 'reader-toolbar';
     closeButton = document.createElement('button');
@@ -266,7 +257,7 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
     content = document.createElement('div');
     content.className = 'reader-content';
     content.append(document.importNode(data.article, true));
-    overlay.append(paper, toolbar, content);
+    overlay.append(toolbar, content);
     document.body.append(overlay);
     setArticleMeta(data);
     root.classList.add('reader-open');
@@ -352,7 +343,7 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
     clearTimeout(scrollTimer);
     setPhase('closing');
     closeButton.disabled = true;
-    // Fold the first page, even when returning from the end of a long article.
+    // Clear the first view back into the home grains, even from a long article.
     overlay.scrollTop = 0;
     animate(0, () => {
       overlay.remove();
