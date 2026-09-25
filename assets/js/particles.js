@@ -69,6 +69,7 @@ export class ParticleExperience {
     this.poolVersion = 0;
     this.layout = {};
     this.documentMorph = null;
+    this.pageTurn = null;
     this.frame = this.frame.bind(this);
     this._onVisibility = this._onVisibility.bind(this);
     this._onContextLost = this._onContextLost.bind(this);
@@ -88,7 +89,8 @@ export class ParticleExperience {
     document.fonts?.load?.('italic 180px Instrument', this.titleText).then(() => {
       if (this.destroyed) return;
       this._makeTitle();
-      if (this.documentMorph) this._renderDocumentMorph();
+      if (this.pageTurn) this._renderPageTurn();
+      else if (this.documentMorph) this._renderDocumentMorph();
       else if (this.reduced) this._snapToTargets();
       else this._wake();
     }).catch(() => {});
@@ -105,6 +107,7 @@ export class ParticleExperience {
       fps: this.fps,
       poolVersion: this.poolVersion,
       documentMorph: this.documentMorph ? this.documentMorph.amount : null,
+      pageTurn: this.pageTurn ? this.pageTurn.amount : null,
     };
   }
 
@@ -133,6 +136,14 @@ export class ParticleExperience {
         rect.height *= scaleY;
       }
     }
+    if (this.pageTurn && previousWidth > 0 && previousHeight > 0) {
+      const scaleX = width / previousWidth;
+      const scaleY = height / previousHeight;
+      this.pageTurn.rect.x *= scaleX;
+      this.pageTurn.rect.y *= scaleY;
+      this.pageTurn.rect.width *= scaleX;
+      this.pageTurn.rect.height *= scaleY;
+    }
     this.layout = {
       project: copyRect(layout.project, canvasRect),
       code: copyRect(layout.code, canvasRect),
@@ -159,15 +170,18 @@ export class ParticleExperience {
     if (this.documentMorph) {
       this._snapToTargets();
       this._captureDocumentMorph(this.documentMorph.sourceRect);
-      this._renderDocumentMorph();
-    } else if (this.reduced) this._snapToTargets();
+    } else if (this.pageTurn) this._snapToTargets();
+    if (this.pageTurn) this._renderPageTurn();
+    else if (this.documentMorph) this._renderDocumentMorph();
+    else if (this.reduced) this._snapToTargets();
     else this._wake();
     return this;
   }
 
   setProgress(value) {
     this.progress = clamp(Number(value) || 0, 0, 5.82);
-    if (this.documentMorph) this._renderDocumentMorph();
+    if (this.pageTurn) this._renderPageTurn();
+    else if (this.documentMorph) this._renderDocumentMorph();
     else if (this.reduced) this._snapToTargets();
     else this._wake();
     return this;
@@ -175,7 +189,8 @@ export class ParticleExperience {
 
   setTheme(theme = 'ink') {
     this.theme = theme === 'paper' ? 'paper' : 'ink';
-    if (this.documentMorph) this._renderDocumentMorph();
+    if (this.pageTurn) this._renderPageTurn();
+    else if (this.documentMorph) this._renderDocumentMorph();
     else if (this.reduced) this._renderStatic();
     else if (!this.wantsToRun) {
       if (this.first) this._snapToTargets();
@@ -190,7 +205,8 @@ export class ParticleExperience {
     this._cancelFrame();
     this.waves.length = 0;
     this.last = performance.now();
-    if (this.documentMorph) this._renderDocumentMorph();
+    if (this.pageTurn) this._renderPageTurn();
+    else if (this.documentMorph) this._renderDocumentMorph();
     else if (this.reduced) this._snapToTargets();
     else this._wake();
     return this;
@@ -211,7 +227,7 @@ export class ParticleExperience {
   }
 
   pulse(x = this.width / 2, y = this.height / 2, strength = 1) {
-    if (this.documentMorph) return this;
+    if (this.documentMorph || this.pageTurn) return this;
     this.waves.push({ x, y, start: this.time, strength });
     if (this.waves.length > 8) this.waves.shift();
     if (this.reduced) this._renderStatic();
@@ -220,7 +236,7 @@ export class ParticleExperience {
   }
 
   burst() {
-    if (this.documentMorph) return this;
+    if (this.documentMorph || this.pageTurn) return this;
     const rect = this.layout.project;
     const x = rect ? rect.x + rect.width / 2 : this.width / 2;
     const y = rect ? rect.y + rect.height / 2 : this.height / 2;
@@ -241,7 +257,8 @@ export class ParticleExperience {
     if (this.destroyed) return this;
     this.wantsToRun = true;
     this.last = performance.now();
-    if (this.documentMorph) this._renderDocumentMorph();
+    if (this.pageTurn) this._renderPageTurn();
+    else if (this.documentMorph) this._renderDocumentMorph();
     else if (this.reduced) this._snapToTargets();
     else this._wake();
     return this;
@@ -261,6 +278,7 @@ export class ParticleExperience {
     if (this.destroyed) return this;
     const rect = copyRect(sourceRect, this.canvas.getBoundingClientRect());
     if (!rect) return this;
+    if (this.pageTurn) this.endPageTurn();
     if (this.documentMorph) this.endDocumentMorph();
     if (this.first) this._snapToTargets();
     this._cancelFrame();
@@ -301,10 +319,52 @@ export class ParticleExperience {
   /** Restore the scroll scene and its original run state after the reverse fold. */
   endDocumentMorph() {
     if (!this.documentMorph) return this;
+    this.pageTurn = null;
     this.documentMorph = null;
     this.last = performance.now();
     this._snapToTargets();
     if (this.wantsToRun && !this.reduced) this._wake();
+    this._dispatchState();
+    return this;
+  }
+
+  /** Begin a controller-driven particle sheet turn over the current reader. */
+  beginPageTurn(rect, direction = 1) {
+    if (this.destroyed) return this;
+    const localRect = copyRect(rect, this.canvas.getBoundingClientRect());
+    if (!localRect) return this;
+    if (this.pageTurn) this.endPageTurn();
+    if (this.first) this._snapToTargets();
+    this._cancelFrame();
+    this.pageTurn = {
+      amount: 0,
+      direction: Number(direction) < 0 ? -1 : 1,
+      rect: localRect,
+    };
+    this._renderPageTurn();
+    this._dispatchState();
+    return this;
+  }
+
+  /** Render one synchronous page-turn frame. The controller supplies 0..1. */
+  setPageTurn(amount, rect) {
+    if (!this.pageTurn || this.destroyed) return this;
+    updateRect(this.pageTurn.rect, rect, this.canvas.getBoundingClientRect());
+    this.pageTurn.amount = clamp(Number(amount) || 0);
+    this._renderPageTurn();
+    return this;
+  }
+
+  /** Restore the hidden reader particle state, or the standalone home stage. */
+  endPageTurn() {
+    if (!this.pageTurn) return this;
+    this.pageTurn = null;
+    this.last = performance.now();
+    if (this.documentMorph) this._renderDocumentMorph();
+    else {
+      this._snapToTargets();
+      if (this.wantsToRun && !this.reduced) this._wake();
+    }
     this._dispatchState();
     return this;
   }
@@ -314,6 +374,7 @@ export class ParticleExperience {
     this.destroyed = true;
     this.wantsToRun = false;
     this.documentMorph = null;
+    this.pageTurn = null;
     this._cancelFrame();
     document.removeEventListener('visibilitychange', this._onVisibility);
     this.canvas.removeEventListener('webglcontextlost', this._onContextLost);
@@ -843,9 +904,8 @@ export class ParticleExperience {
     const morph = this.documentMorph;
     if (!morph?.captured || !this.xyz || !this.buffer) return;
     const amount = morph.amount;
-    const travel = smooth(0, 0.84, amount);
     const otherVisibility = 1 - smooth(0, 0.28, amount);
-    const paperVisibility = 1 - smooth(0.72, 1, amount);
+    const paperVisibility = 1 - smooth(0.82, 1, amount);
     const source = morph.sourceRect;
     const expanded = morph.expandedRect || source;
     for (let i = 0; i < this.count; i += 1) {
@@ -865,11 +925,22 @@ export class ParticleExperience {
         const expandedY = expanded.y + ny * expanded.height;
         const originX = morph.direction < 0 ? collapsedX : morph.captured[particle];
         const originY = morph.direction < 0 ? collapsedY : morph.captured[particle + 1];
-        x = mix(originX, expandedX, travel);
-        y = mix(originY, expandedY, travel);
+        const phase = (this.seed[position + 1] - 0.5) * 0.11 * Math.sin(amount * Math.PI);
+        const travel = smooth(0, 1, clamp(amount + phase));
+        const linearX = mix(originX, expandedX, travel);
+        const linearY = mix(originY, expandedY, travel);
+        const dx = expandedX - originX;
+        const dy = expandedY - originY;
+        const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+        const arc = Math.sin(travel * Math.PI) * (
+          Math.sin((ny * 1.35 + nx * 0.42) * TAU + this.seed[position + 2] * 1.4) * 2.8
+          + (nx - 0.5) * 3.6
+        );
+        x = linearX - (dy / distance) * arc;
+        y = linearY + (dx / distance) * arc;
         const capturedAlpha = morph.captured[particle + 6];
         const dominantAlpha = Math.max(capturedAlpha, 0.56);
-        alpha = (morph.direction < 0 ? dominantAlpha : mix(capturedAlpha, dominantAlpha, smooth(0, 0.16, amount))) * paperVisibility;
+        alpha = (morph.direction < 0 ? dominantAlpha : mix(capturedAlpha, dominantAlpha, smooth(0, 0.18, travel))) * paperVisibility;
         const expandedSize = Math.max(morph.captured[particle + 2], 1.25) * 1.08;
         size = mix(morph.direction < 0 ? Math.max(morph.captured[particle + 2], 1.25) : morph.captured[particle + 2], expandedSize, travel);
       }
@@ -883,6 +954,87 @@ export class ParticleExperience {
       this.buffer[particle + 3] = morph.captured[particle + 3];
       this.buffer[particle + 4] = morph.captured[particle + 4];
       this.buffer[particle + 5] = morph.captured[particle + 5];
+      this.buffer[particle + 6] = alpha;
+    }
+    this.first = false;
+    this._draw();
+  }
+
+  _renderPageTurn() {
+    const page = this.pageTurn;
+    if (!page || !this.xyz || !this.buffer) return;
+    const amount = page.amount;
+    const travel = smooth(0, 1, amount);
+    const visibility = smooth(0, 0.22, amount) * (1 - smooth(0.78, 1, amount));
+    const curlEnvelope = Math.sin(travel * Math.PI);
+    const rect = page.rect;
+    const direction = page.direction;
+    const ink = this.theme === 'ink';
+    const baseR = ink ? 0.925 : 0.12;
+    const baseG = ink ? 0.914 : 0.12;
+    const baseB = ink ? 0.865 : 0.105;
+    const accentR = ink ? 0.89 : 0.63;
+    const accentG = ink ? 0.53 : 0.25;
+    const accentB = ink ? 0.38 : 0.17;
+    for (let i = 0; i < this.count; i += 1) {
+      const position = i * 4;
+      const particle = i * 7;
+      const a = this.seed[position];
+      const b = this.seed[position + 1];
+      const c = this.seed[position + 2];
+      const d = this.seed[position + 3];
+      let u = b;
+      let v = c;
+      let edge = false;
+      let leading = false;
+      if (a < 0.28) {
+        edge = true;
+        const side = Math.min(3, Math.floor((a / 0.28) * 4));
+        if (side === 0) {
+          u = b;
+          v = 0;
+        } else if (side === 1) {
+          u = 1;
+          v = b;
+          leading = direction > 0;
+        } else if (side === 2) {
+          u = 1 - b;
+          v = 1;
+        } else {
+          u = 0;
+          v = 1 - b;
+          leading = direction < 0;
+        }
+      }
+      const distanceFromSpine = direction > 0 ? u : 1 - u;
+      const side = direction > 0 ? 1 : -1;
+      const spineX = direction > 0 ? rect.x : rect.x + rect.width;
+      const remaining = 1 - travel;
+      const surfaceArc = Math.sin(distanceFromSpine * Math.PI);
+      const depth = curlEnvelope * Math.sqrt(Math.max(0, remaining));
+      const projectedX = spineX + side * distanceFromSpine * rect.width * remaining;
+      const bow = side * surfaceArc * depth * rect.width * (0.09 + d * 0.025);
+      const freeEdgeInfluence = Math.pow(distanceFromSpine, 8);
+      const freeEdgeBend = -side * freeEdgeInfluence * Math.sin(v * Math.PI) * curlEnvelope * rect.width * 0.045;
+      const verticalCompression = 1 - surfaceArc * depth * 0.13;
+      const sheetY = rect.y + rect.height / 2 + (v - 0.5) * rect.height * verticalCompression;
+      const surfaceLift = Math.sin(v * Math.PI) * surfaceArc * depth * rect.height * 0.022;
+      const ripple = Math.sin((v * 2.4 + distanceFromSpine * 0.45) * Math.PI + travel * Math.PI) * surfaceArc * curlEnvelope * 2.8;
+      const x = projectedX + bow + freeEdgeBend;
+      const y = sheetY + surfaceLift + ripple;
+      const warm = leading ? 0.82 : edge ? 0.18 : 0;
+      const alpha = visibility * (leading ? 0.92 : edge ? 0.66 : 0.075 + d * 0.12);
+      const size = leading ? 1.75 + d * 0.65 : edge ? 1.05 + d * 0.55 : 0.55 + d * 0.55;
+      this.xyz[position] = x;
+      this.xyz[position + 1] = y;
+      this.xyz[position + 2] = 0;
+      this.xyz[position + 3] = 0;
+      this.buffer[particle] = x;
+      this.buffer[particle + 1] = y;
+      this.buffer[particle + 2] = size;
+      this.buffer[particle + 3] = mix(baseR, accentR, warm);
+      this.buffer[particle + 4] = mix(baseG, accentG, warm);
+      this.buffer[particle + 5] = mix(baseB, accentB, warm);
       this.buffer[particle + 6] = alpha;
     }
     this.first = false;
@@ -951,7 +1103,7 @@ export class ParticleExperience {
   }
 
   _canRun() {
-    return this.wantsToRun && !this.documentMorph && this.visible && !this.reduced && !this.destroyed && !this.contextLost && this.renderer !== 'static';
+    return this.wantsToRun && !this.documentMorph && !this.pageTurn && this.visible && !this.reduced && !this.destroyed && !this.contextLost && this.renderer !== 'static';
   }
 
   _schedule() {
@@ -992,7 +1144,8 @@ export class ParticleExperience {
       this.gl.uniform1f(this.uniforms.ratio, this.dpr);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, this.buffer, this.gl.DYNAMIC_DRAW);
-      if (this.documentMorph) this._renderDocumentMorph();
+      if (this.pageTurn) this._renderPageTurn();
+      else if (this.documentMorph) this._renderDocumentMorph();
       else if (this.reduced) this._snapToTargets();
       else this._wake();
       this._dispatchState();

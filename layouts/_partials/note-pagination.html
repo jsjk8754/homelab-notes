@@ -1,0 +1,10 @@
+{{ if eq .Section "notes" }}
+{{ $notes := (where site.RegularPages "Section" "notes").ByWeight }}
+{{ $current := . }}
+{{ range $index, $note := $notes }}{{ if eq $note.RelPermalink $current.RelPermalink }}
+<nav class="article-pagination" aria-label="노트 넘기기" data-note-position="{{ $index }}" data-note-count="{{ len $notes }}">
+  {{ if gt $index 0 }}{{ with index $notes (sub $index 1) }}<a href="{{ .RelPermalink }}" rel="prev" data-reader-page="-1"><span>← 이전 노트</span><strong>{{ .Title }}</strong></a>{{ end }}{{ else }}<span class="pagination-end">첫 번째 노트</span>{{ end }}
+  {{ if lt (add $index 1) (len $notes) }}{{ with index $notes (add $index 1) }}<a href="{{ .RelPermalink }}" rel="next" data-reader-page="1"><span>다음 노트 →</span><strong>{{ .Title }}</strong></a>{{ end }}{{ else }}<span class="pagination-end">마지막 노트</span>{{ end }}
+</nav>
+{{ end }}{{ end }}
+{{ end }}

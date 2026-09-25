@@ -25,11 +25,16 @@
   <link rel="stylesheet" href="{{ $css.RelPermalink }}" integrity="{{ $css.Data.Integrity }}">
   {{ $js := resources.Get "js/main.js" | minify | fingerprint }}
   <script src="{{ $js.RelPermalink }}" integrity="{{ $js.Data.Integrity }}" defer></script>
+  {{ $readerCSS := resources.Get "css/article-reader.css" | minify | fingerprint }}
+  <link rel="stylesheet" href="{{ $readerCSS.RelPermalink }}" integrity="{{ $readerCSS.Data.Integrity }}">
   {{ if .IsHome }}
-  {{ $storyCSS := slice (resources.Get "css/experience.css") (resources.Get "css/article-reader.css") | resources.Concat "css/experience.css" | minify | fingerprint }}
+  {{ $storyCSS := resources.Get "css/experience.css" | minify | fingerprint }}
   <link rel="stylesheet" href="{{ $storyCSS.RelPermalink }}" integrity="{{ $storyCSS.Data.Integrity }}">
   {{ $experience := resources.Get "js/experience.js" | js.Build (dict "targetPath" "js/experience.js" "format" "esm" "target" "es2020" "minify" true) | fingerprint }}
   <script type="module" src="{{ $experience.RelPermalink }}" integrity="{{ $experience.Data.Integrity }}"></script>
+  {{ else if and .IsPage (eq .Section "notes") }}
+  {{ $reader := resources.Get "js/article-page.js" | js.Build (dict "targetPath" "js/article-page.js" "format" "esm" "target" "es2020" "minify" true) | fingerprint }}
+  <script type="module" src="{{ $reader.RelPermalink }}" integrity="{{ $reader.Data.Integrity }}"></script>
   {{ end }}
 </head>
 <body{{ if .IsHome }} class="story-home"{{ end }} data-search-index="{{ "index.json" | relURL }}">

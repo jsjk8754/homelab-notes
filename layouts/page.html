@@ -6,6 +6,7 @@
   {{ with .Params.tags }}<nav class="article-tags" aria-label="글의 주제">{{ range . }}{{ with site.GetPage (printf "/tags/%s" (. | urlize)) }}<a href="{{ .RelPermalink }}">#{{ .LinkTitle }}</a>{{ end }}{{ end }}</nav>{{ end }}
   <div class="article-actions"><button type="button" data-copy-link hidden>이 글 링크 복사</button><a href="{{ .CurrentSection.RelPermalink }}">목록으로 돌아가기 {{ partial "arrow.html" . }}</a></div><p class="copy-status" role="status" data-copy-status></p>
   {{ with .Params.storyURL }}<a class="story-reference" href="{{ . }}">이 실험의 이야기를 벨로그에서 읽기 {{ partial "arrow.html" $ }}</a>{{ end }}
+  {{ partial "note-pagination.html" . }}
   </div></div>
 </article>
 {{ end }}
