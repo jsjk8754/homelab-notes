@@ -511,7 +511,10 @@ export class ParticleExperience {
   }
 
   _allocatePool() {
-    const desired = this.renderer === 'webgl' ? (this.mobile ? 10000 : 19000) : Math.min(1800, this.mobile ? 10000 : 19000);
+    // A lost WebGL context keeps its context object. Preserve the WebGL-sized
+    // pool while the renderer is temporarily marked static during recovery.
+    const usesWebGLPool = this.renderer === 'webgl' || Boolean(this.gl);
+    const desired = usesWebGLPool ? (this.mobile ? 10000 : 19000) : Math.min(1800, this.mobile ? 10000 : 19000);
     this.count = desired;
     this.xyz = new Float32Array(desired * 4);
     this.seed = new Float32Array(desired * 4);
@@ -1199,7 +1202,7 @@ export class ParticleExperience {
     this._setReady(true);
   }
 
-  _snapToTargets() {
+  _snapToTargets(draw = true) {
     if (!this.xyz) return;
     const stage = Math.min(5, Math.floor(this.progress));
     const local = this.progress - stage;
@@ -1220,7 +1223,7 @@ export class ParticleExperience {
       this._writeBuffer(i, target[0], target[1], target);
     }
     this.first = false;
-    this._draw();
+    if (draw) this._draw();
   }
 
   _renderStatic() {
@@ -1278,6 +1281,17 @@ export class ParticleExperience {
       this.gl = this.canvas.getContext('webgl');
       this._createWebGLResources();
       this.renderer = 'webgl';
+      const desiredCount = this.mobile ? 10000 : 19000;
+      if (this.count !== desiredCount) {
+        this._allocatePool();
+        this._buildGeometry();
+        if (this.documentMorph) {
+          this._snapToTargets(false);
+          this._captureDocumentMorph();
+        } else if (this.pageTurn) this._snapToTargets(false);
+        if (this.documentMorph) this._refreshDocumentGlyphTargets();
+        if (this.pageTurn) this._refreshPageGlyphTargets();
+      }
       this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
       this.gl.uniform2f(this.uniforms.resolution, this.width, this.height);
       this.gl.uniform1f(this.uniforms.ratio, this.dpr);
@@ -1285,9 +1299,10 @@ export class ParticleExperience {
       this.gl.bufferData(this.gl.ARRAY_BUFFER, this.buffer, this.gl.DYNAMIC_DRAW);
       if (this.pageTurn) this._renderPageTurn();
       else if (this.documentMorph) this._renderDocumentMorph();
-      else if (this.reduced) this._snapToTargets();
-      else this._wake();
-      this._dispatchState();
+      else {
+        this._snapToTargets();
+        if (!this.reduced) this._wake();
+      }
     } catch (error) {
       this.contextLost = true;
       this.renderer = 'static';

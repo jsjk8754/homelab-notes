@@ -37,7 +37,15 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
   const active = () => Boolean(overlay);
   const frameFor = link => link.closest('[data-reader-frame]');
   const linkFor = url => [...document.querySelectorAll('a[data-reader-link]')].find(link => link.href === new URL(url, location.origin).href);
-  const setPhase = value => { phase = value; root.dataset.readerPhase = value; };
+  const setPhase = value => {
+    phase = value;
+    root.dataset.readerPhase = value;
+    if (!active()) return;
+    const reading = value === 'reading';
+    if (content) content.inert = !reading;
+    const pages = toolbar?.querySelector('.reader-pages');
+    if (pages) pages.inert = !reading;
+  };
   const expandedRect = () => {
     const article = content.querySelector('.article');
     const r = article.getBoundingClientRect();
@@ -143,19 +151,30 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
     positions.set(positionKey(record), overlay.scrollTop);
     if (positions.size > 60) positions.delete(positions.keys().next().value);
   }
-  function jumpToHash() {
+  function focusTarget(target) {
+    const temporaryTabIndex = !target.hasAttribute('tabindex');
+    if (temporaryTabIndex) target.tabIndex = -1;
+    target.focus({ preventScroll: true });
+    if (temporaryTabIndex) target.addEventListener('blur', () => target.removeAttribute('tabindex'), { once: true });
+  }
+  function jumpToHash({ focus = false } = {}) {
     if (!location.hash || !overlay) return false;
     let id;
     try { id = decodeURIComponent(location.hash.slice(1)); } catch { return false; }
     const target = [...content.querySelectorAll('[id]')].find(element => element.id === id);
     if (!target) return false;
     target.scrollIntoView({ behavior: 'instant', block: 'start' });
+    if (focus) focusTarget(target);
     return true;
   }
   function focusTitle() {
     const title = content.querySelector('h1');
     title.tabIndex = -1;
     title.focus({ preventScroll: true });
+  }
+  function focusReadingDestination(scroll = 0) {
+    if (scroll > 0) closeButton.focus({ preventScroll: true });
+    else if (!jumpToHash({ focus: true })) focusTitle();
   }
   function updatePager() {
     toolbar.querySelector('.reader-pages')?.remove();
@@ -164,6 +183,7 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
     const nav = document.createElement('nav');
     nav.className = 'reader-pages';
     nav.setAttribute('aria-label', '노트 넘기기');
+    nav.inert = phase !== 'reading';
     for (const direction of [-1, 1]) {
       const original = pagination.querySelector(`[data-reader-page="${direction}"]`);
       const item = document.createElement(original ? 'a' : 'span');
@@ -208,8 +228,8 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
     closeButton.disabled = false;
     setPhase('reading');
     updatePager();
-    if (!completed.scroll) jumpToHash();
-    if (focus) focusTitle();
+    if (focus) focusReadingDestination(completed.scroll);
+    else if (!completed.scroll) jumpToHash();
     status.textContent = '';
   }
   async function turnPage(link, saved = null, restoreScroll = 0) {
@@ -334,14 +354,14 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
       if (url.origin !== location.origin || url.pathname !== location.pathname || !url.hash) return;
       event.preventDefault();
       history.replaceState(history.state, '', url);
-      jumpToHash();
+      jumpToHash({ focus: true });
       saveScroll();
     });
     if (standalone) {
       render(1);
       setPhase('reading');
       if (restoreScroll) overlay.scrollTop = restoreScroll;
-      else jumpToHash();
+      focusReadingDestination(restoreScroll);
       return;
     }
     render(0);
@@ -352,8 +372,7 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
       animate(1, () => {
         setPhase('reading');
         if (restoreScroll) overlay.scrollTop = restoreScroll;
-        else jumpToHash();
-        focusTitle();
+        focusReadingDestination(restoreScroll);
         status.textContent = '';
       });
     });
@@ -454,11 +473,16 @@ export function createArticleReader({ engine, getHomeState, suspendHome = () => 
       if (phase === 'closing') {
         closeButton.disabled = false;
         setPhase('opening');
-        animate(1, () => { setPhase('reading'); overlay.scrollTop = restoreScroll; });
+        animate(1, () => {
+          setPhase('reading');
+          overlay.scrollTop = restoreScroll;
+          focusReadingDestination(restoreScroll);
+        });
       } else if (phase === 'reading') {
         record = saved;
         if (restoreScroll) overlay.scrollTop = restoreScroll;
-        else if (!jumpToHash()) overlay.scrollTop = 0;
+        else overlay.scrollTop = 0;
+        focusReadingDestination(restoreScroll);
       }
       return;
     }

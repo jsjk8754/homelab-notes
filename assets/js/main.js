@@ -134,10 +134,18 @@
       if (block.querySelector('.code-copy')) return;
       const code = block.querySelector('pre code'); if (!code) return;
       const button = document.createElement('button'); button.type = 'button'; button.className = 'code-copy'; button.textContent = '복사'; button.setAttribute('aria-label','코드 복사');
+      const status = block.querySelector('.code-copy-status') || document.createElement('span');
+      status.className = 'code-copy-status visually-hidden';
+      status.setAttribute('role', 'status');
+      status.textContent = '';
+      if (!status.parentElement) block.append(status);
+      let reset;
       button.addEventListener('click',async () => {
-        try { await navigator.clipboard.writeText(code.textContent); button.textContent = '복사됨'; }
-        catch { button.textContent = '직접 선택해 복사'; }
-        setTimeout(() => { button.textContent = '복사'; },2200);
+        clearTimeout(reset);
+        status.textContent = '';
+        try { await navigator.clipboard.writeText(code.textContent); button.textContent = '복사됨'; status.textContent = '코드를 복사했습니다.'; }
+        catch { button.textContent = '직접 선택해 복사'; status.textContent = '코드를 복사하지 못했습니다. 직접 선택해 복사해 주세요.'; }
+        reset = setTimeout(() => { button.textContent = '복사'; status.textContent = ''; },2200);
       });
       block.append(button);
     });

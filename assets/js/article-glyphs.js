@@ -116,7 +116,7 @@ export function captureArticleGlyphs(element, {
     let hidden = false;
     for (let current = node; current; current = current.parentElement) {
       if (ignoredTags.has(current.tagName)
-        || current.matches?.('.code-copy,[aria-hidden="true"]')
+        || current.matches?.('.code-copy,.visually-hidden,[aria-hidden="true"]')
         || styleFor(current).display === 'none'
         || ['hidden', 'collapse'].includes(styleFor(current).visibility)) {
         hidden = true;

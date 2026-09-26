@@ -64,7 +64,7 @@ html.immersive-ready { scroll-behavior: auto; scroll-padding-top: 0; }
 .immersive-ready .story-header { position: fixed; }
 .immersive-ready .story-navigation { display: flex; }
 .immersive-ready .story-header,.immersive-ready .story-navigation { opacity: 1; visibility: visible; transition: opacity .4s, visibility .4s; }
-[data-story-intro=true] .story-header,[data-story-intro=true] .story-navigation { opacity: 0; visibility: hidden; pointer-events: none; }
+.immersive-ready[data-story-intro=true] .story-header,.immersive-ready[data-story-intro=true] .story-navigation { opacity: 0; visibility: hidden; pointer-events: none; }
 .immersive-ready #story-track { display: block; height: 1500svh; pointer-events: none; }
 .immersive-ready .story-scene { position: fixed; inset: 0; z-index: 3; min-height: 0; padding: 0; opacity: 0; visibility: hidden; pointer-events: none; }
 .immersive-ready .story-scene.is-active { visibility: visible; }

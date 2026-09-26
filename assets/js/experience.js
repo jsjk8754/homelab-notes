@@ -12,6 +12,7 @@ const stops = [0, 1.35, 2.45, 3.25, 4.55, 5.25];
 const end = 5.82;
 let experience, enhanced = false, progress = 0, current = 0, scheduled = false;
 let resizing = 0, hashTimer = 0, pendingFocus = null, ready = false;
+let resizeProgress = 0, resizeDestination = null;
 let reader, suspended = false;
 const homePath = location.pathname;
 
@@ -33,7 +34,8 @@ const hashScene = () => panels.findIndex(panel => '#' + panel.id === location.ha
 
 function update() {
   scheduled = false;
-  if (!enhanced || suspended) return;
+  if (!enhanced || suspended || resizing) return;
+  resizeDestination = null;
   progress = clamp(scrollY / maxScroll() * end, 0, end);
   const scene = Math.min(panels.length - 1, Math.floor(progress));
   const local = progress - scene;
@@ -52,7 +54,7 @@ function update() {
   root.dataset.scene = String(scene);
   panels.forEach((panel, index) => {
     const active = index === scene;
-    const accessible = active;
+    const accessible = active && opacity > .02;
     if (!accessible && panel.contains(document.activeElement)) {
       // Keep focus out of a subtree before making it inert/hidden.
       document.activeElement.blur();
@@ -94,7 +96,11 @@ function goToScene(scene, { history = true, focus = false, instant = false } = {
     panels[scene].scrollIntoView({ behavior: 'auto' });
     return;
   }
+  clearTimeout(hashTimer);
   if (history && location.hash !== '#' + panels[scene].id) window.history.pushState({}, '', '#' + panels[scene].id);
+  // Keep explicit navigation until the next settled frame: a resize event may
+  // still be queued even if a rapid rotation returned to the original size.
+  resizeDestination = stops[scene];
   pendingFocus = focus ? scene : null;
   scrollTo({ top: maxScroll() * stops[scene] / end, behavior: instant || motion.matches ? 'instant' : 'smooth' });
   requestUpdate();
@@ -171,13 +177,19 @@ async function initialize() {
     addEventListener('hashchange', () => { if (reader.active || reader.loading || location.pathname !== homePath) return; const scene = hashScene(); if (scene >= 0) goToScene(scene, { history: false, instant: true }); });
     addEventListener('popstate', () => { if (reader.active || reader.loading || location.pathname !== homePath) return; const scene = hashScene(); goToScene(scene >= 0 ? scene : 0, { history: false, instant: true }); });
     addEventListener('resize', () => {
+      // Resize can clamp scrollY before its scroll event arrives. Keep the last
+      // scene position until layout is rebuilt instead of treating that as input.
+      clearTimeout(hashTimer);
+      if (!resizing) resizeProgress = progress;
       clearTimeout(resizing);
       resizing = setTimeout(() => {
+        resizing = 0;
+        const destination = resizeDestination ?? resizeProgress;
+        resizeDestination = null;
         if (!enhanced) return;
         if (reader.active) { experience.resize(layout()); reader.resize(); return; }
-        const previous = progress;
         experience.resize(layout());
-        scrollTo({ top: maxScroll() * previous / end, behavior: 'instant' });
+        scrollTo({ top: maxScroll() * destination / end, behavior: 'instant' });
         update();
       }, 140);
     });
